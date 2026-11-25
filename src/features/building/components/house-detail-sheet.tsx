@@ -1,7 +1,8 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Pencil, Trash2, UserMinus, UserPlus } from 'lucide-react'
+import { IndianRupee, Pencil, Trash2, UserMinus, UserPlus } from 'lucide-react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -10,7 +11,6 @@ import { ConfirmSheet } from '@/components/common/confirm-sheet'
 import { unassignTenant } from '@/features/tenants/services/tenants.service'
 import { rentStatusTokens } from '@/constants/status'
 import { formatCurrency } from '@/utils/format'
-import { houseTypeLabel } from '../types'
 import type { House } from '../types'
 import type { Tenant } from '@/types/domain'
 
@@ -39,7 +39,13 @@ export function HouseDetailSheet({
   onEditHouse,
   onDeleteHouse,
 }: HouseDetailSheetProps) {
+  const navigate = useNavigate()
   if (!house) return null
+
+  const handleRecordPayment = (tenantId: string) => {
+    onOpenChange(false)
+    navigate(`/tenants/record-payment?tenantId=${tenantId}`)
+  }
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -73,7 +79,11 @@ export function HouseDetailSheet({
           <div>
             <p className="mb-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">Tenant</p>
             {house.tenant ? (
-              <TenantSlot tenant={house.tenant} onView={() => onViewTenant(house.tenant!.id)} />
+              <TenantSlot
+                tenant={house.tenant}
+                onView={() => onViewTenant(house.tenant!.id)}
+                onRecordPayment={() => handleRecordPayment(house.tenant!.id)}
+              />
             ) : (
               <button
                 type="button"
@@ -95,41 +105,31 @@ export function HouseDetailSheet({
 
 function HouseFacts({ house }: { house: House }) {
   const facts = [
-    { label: 'House', value: house.houseNumber },
-    { label: 'Type', value: houseTypeLabel(house.houseType) },
-  ]
-
-  const utilityFacts = [
     { label: 'Gas Connection No.', value: house.gasConnectionNumber },
     { label: 'Electricity Bill No.', value: house.electricityBillNumber },
   ].filter((fact) => fact.value)
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-stretch divide-x divide-border rounded-lg bg-muted/50 p-3 text-sm">
-        {facts.map((fact) => (
-          <div key={fact.label} className="flex-1 px-3 first:pl-0 last:pr-0">
-            <p className="text-xs text-muted-foreground">{fact.label}</p>
-            <p className="truncate font-medium text-foreground">{fact.value}</p>
-          </div>
-        ))}
-      </div>
-
-      {utilityFacts.length > 0 ? (
-        <div className="grid grid-cols-2 gap-x-3 gap-y-2 rounded-lg border border-border/70 p-3 text-sm">
-          {utilityFacts.map((fact) => (
-            <div key={fact.label}>
-              <p className="text-xs text-muted-foreground">{fact.label}</p>
-              <p className="truncate font-medium text-foreground">{fact.value}</p>
-            </div>
-          ))}
+    <div className="grid grid-cols-2 gap-x-3 gap-y-2 rounded-lg border border-border/70 p-3 text-sm">
+      {facts.map((fact) => (
+        <div key={fact.label}>
+          <p className="text-xs text-muted-foreground">{fact.label}</p>
+          <p className="truncate font-medium text-foreground">{fact.value}</p>
         </div>
-      ) : null}
+      ))}
     </div>
   )
 }
 
-function TenantSlot({ tenant, onView }: { tenant: Tenant; onView: () => void }) {
+function TenantSlot({
+  tenant,
+  onView,
+  onRecordPayment,
+}: {
+  tenant: Tenant
+  onView: () => void
+  onRecordPayment: () => void
+}) {
   const queryClient = useQueryClient()
   const [removeOpen, setRemoveOpen] = useState(false)
   const rentToken = rentStatusTokens[tenant.rentStatus]
@@ -149,26 +149,33 @@ function TenantSlot({ tenant, onView }: { tenant: Tenant; onView: () => void }) 
   })
 
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-border/70 bg-card/60 p-3">
-      <button type="button" onClick={onView} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-        <Avatar className="size-10">
-          {tenant.photoUrl ? <AvatarImage src={tenant.photoUrl} alt={tenant.name} /> : null}
-          <AvatarFallback>{initials(tenant.name)}</AvatarFallback>
-        </Avatar>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-foreground">{tenant.name}</p>
-          <p className="text-xs text-muted-foreground">{formatCurrency(tenant.rent)}/mo</p>
-        </div>
-      </button>
-      <StatusChip token={rentToken} />
-      <Button
-        variant="outline"
-        size="icon-sm"
-        aria-label="Remove from house"
-        className="text-danger hover:text-danger"
-        onClick={() => setRemoveOpen(true)}
-      >
-        <UserMinus className="size-4" />
+    <div className="space-y-2 rounded-lg border border-border/70 bg-card/60 p-3">
+      <div className="flex items-center gap-3">
+        <button type="button" onClick={onView} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+          <Avatar className="size-10">
+            {tenant.photoUrl ? <AvatarImage src={tenant.photoUrl} alt={tenant.name} /> : null}
+            <AvatarFallback>{initials(tenant.name)}</AvatarFallback>
+          </Avatar>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-foreground">{tenant.name}</p>
+            <p className="text-xs text-muted-foreground">{formatCurrency(tenant.rent)}/mo</p>
+          </div>
+        </button>
+        <StatusChip token={rentToken} />
+        <Button
+          variant="outline"
+          size="icon-sm"
+          aria-label="Remove from house"
+          className="text-danger hover:text-danger"
+          onClick={() => setRemoveOpen(true)}
+        >
+          <UserMinus className="size-4" />
+        </Button>
+      </div>
+
+      <Button variant="outline" size="sm" className="w-full" onClick={onRecordPayment}>
+        <IndianRupee className="size-4" />
+        Record Payment
       </Button>
 
       <ConfirmSheet

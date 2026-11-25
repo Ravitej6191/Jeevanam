@@ -11,6 +11,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { DatePicker } from '@/components/common/date-picker'
+import { PhotoPicker } from '@/components/common/photo-picker'
+import { usePhotos } from '@/hooks/use-photos'
 import { EmptyState } from '@/components/common/empty-state'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useLoans } from '@/features/loans/hooks/use-loans'
@@ -38,6 +40,7 @@ export function RecordLoanRepaymentPage() {
   const queryClient = useQueryClient()
   const { data: loans, isLoading } = useLoans()
   const activeLoans = (loans ?? []).filter((l) => l.stillToPay > 0)
+  const { photos, add, remove, resolveUrls } = usePhotos('loan-repayments')
 
   const {
     register,
@@ -54,13 +57,21 @@ export function RecordLoanRepaymentPage() {
   const selectedLoan = activeLoans.find((l) => l.id === selectedLoanId)
 
   const mutation = useMutation({
-    mutationFn: (values: RepaymentFormValues) =>
-      createLoanRepayment({
+    mutationFn: async (values: RepaymentFormValues) => {
+      let imageUrls: string[]
+      try {
+        imageUrls = await resolveUrls()
+      } catch {
+        throw new Error('Could not upload the photos. Please try again.')
+      }
+      return createLoanRepayment({
         loanId: values.loanId,
         amount: values.amount,
         paymentDate: values.paymentDate,
         notes: values.notes.trim() || null,
-      }),
+        imageUrls,
+      })
+    },
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['loans'] }),
@@ -70,7 +81,7 @@ export function RecordLoanRepaymentPage() {
       toast.success('Repayment recorded')
       navigate(-1)
     },
-    onError: () => toast.error('Could not record the repayment. Please try again.'),
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Could not record the repayment. Please try again.'),
   })
 
   if (isLoading) {
@@ -152,6 +163,8 @@ export function RecordLoanRepaymentPage() {
         <Label htmlFor="notes">Notes (optional)</Label>
         <Input id="notes" {...register('notes')} />
       </div>
+
+      <PhotoPicker photos={photos} onAdd={add} onRemove={remove} />
 
       <Button type="submit" className="w-full" disabled={mutation.isPending}>
         {mutation.isPending ? <Loader2 className="size-4 animate-spin" /> : null}

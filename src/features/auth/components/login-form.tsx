@@ -6,7 +6,6 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { GoogleIcon } from '@/components/common/google-icon'
-import { APP_VERSION } from '@/constants/app'
 import { useAuth } from '@/providers/auth-provider'
 import { signInWithGoogle } from '../services/auth.service'
 
@@ -76,7 +75,7 @@ export function LoginForm() {
           transition={{ delay: 0.5, duration: 0.4, ease: 'easeOut' }}
           className="mt-1 text-sm text-muted-foreground"
         >
-          Where Every Stay is Organized.
+          Rent, loans and expenses — all in one place.
         </motion.p>
 
         {stage === 'form' ? (
@@ -86,7 +85,7 @@ export function LoginForm() {
             transition={{ duration: 0.4, ease: 'easeOut' }}
             className="mt-6 w-full space-y-5 rounded-xl border border-border bg-card p-6 shadow-xl shadow-black/5 dark:shadow-black/30"
           >
-            <p className="text-center text-sm text-muted-foreground">Sign in to manage your building</p>
+            <p className="text-center text-sm text-muted-foreground">Sign in to manage your property</p>
 
             <Button variant="outline" className="w-full" disabled={isSigningIn} onClick={handleGoogleSignIn}>
               {isSigningIn ? <Loader2 className="size-4 animate-spin" /> : <GoogleIcon className="size-4" />}
@@ -100,14 +99,14 @@ export function LoginForm() {
             </div>
 
             <Button variant="secondary" className="w-full" onClick={continueInDemoMode}>
-              Skip
+              Try Demo
             </Button>
           </motion.div>
         ) : null}
       </motion.div>
 
       <p className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+1rem)] text-center text-xs text-muted-foreground/60">
-        Jeevanam v{APP_VERSION}
+        Made with ❤️
       </p>
     </>
   )

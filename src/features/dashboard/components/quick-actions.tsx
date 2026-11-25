@@ -1,4 +1,4 @@
-import { HandCoins, IndianRupee, Megaphone, Wallet } from 'lucide-react'
+import { HandCoins, IndianRupee, Megaphone, ReceiptText } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 interface QuickAction {
@@ -18,7 +18,7 @@ export function QuickActions({ onRecordPayment, onRecordLoan, onAddExpense, onBr
   const actions: QuickAction[] = [
     { icon: IndianRupee, label: 'Record Payment', onClick: onRecordPayment },
     { icon: HandCoins, label: 'Record Loan', onClick: onRecordLoan },
-    { icon: Wallet, label: 'Add Expense', onClick: onAddExpense },
+    { icon: ReceiptText, label: 'Add Expense', onClick: onAddExpense },
     { icon: Megaphone, label: 'Broadcast', onClick: onBroadcast },
   ]
 

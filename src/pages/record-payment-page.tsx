@@ -16,7 +16,8 @@ import { TenantCombobox } from '@/features/tenants/components/tenant-combobox'
 import { useTenants } from '@/features/tenants/hooks/use-tenants'
 import { createPayment, recordDeposit } from '@/features/tenants/services/tenants.service'
 import { uploadTenantFile } from '@/lib/storage'
-import { formatCurrency, monthKey, monthKeyOfDateString, todayIso } from '@/utils/format'
+import { formatCurrency, todayIso } from '@/utils/format'
+import { currentCycle } from '@/utils/rent-cycle'
 import { cn } from '@/lib/utils'
 import { usePageTitle } from '@/hooks/use-page-title'
 
@@ -57,7 +58,10 @@ export function RecordPaymentPage() {
   const queryClient = useQueryClient()
   const { data: tenants } = useTenants()
   const activeTenants = (tenants ?? []).filter((t) => t.status === 'active')
-  const preselectedTenant = defaultTenantId ? activeTenants.find((t) => t.id === defaultTenantId) : undefined
+  // Rent is only collectable once a tenant has a house, so the rent/other
+  // flows only ever offer allotted tenants.
+  const allottedTenants = activeTenants.filter((t) => t.houseId !== null)
+  const preselectedTenant = defaultTenantId ? allottedTenants.find((t) => t.id === defaultTenantId) : undefined
   const [view, setView] = useState<'form' | 'success'>('form')
   const [successInfo, setSuccessInfo] = useState<{ tenantName: string; amount: number; kind: 'rent' | 'deposit' } | null>(null)
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null)
@@ -81,13 +85,25 @@ export function RecordPaymentPage() {
 
   const selectedTenantId = watch('tenantId')
   const recordType = watch('recordType')
-  const paymentDate = watch('paymentDate')
   const selectedTenant = activeTenants.find((t) => t.id === selectedTenantId)
-  const isCurrentMonth = paymentDate ? monthKeyOfDateString(paymentDate) === monthKey(new Date()) : true
-  const alreadyPaid = recordType === 'rent' && isCurrentMonth && selectedTenant?.rentStatus === 'paid'
-  const isDepositEdit = recordType === 'deposit' && Boolean(selectedTenant?.depositRecord)
+  const alreadyPaid = recordType === 'rent' && selectedTenant?.rentStatus === 'paid'
+  // A deposit is collected once — after that the Deposit option is pointless.
+  const depositCollected = Boolean(selectedTenant?.depositRecord)
+  const recordTypes = depositCollected ? (['rent', 'other'] as const) : (['rent', 'deposit', 'other'] as const)
 
-  const tenantOptions = activeTenants
+  // Rent payments only make sense for tenants who still owe something in
+  // their current cycle — a tenant already marked 'paid' has no dues to
+  // record against. A deposit can only be recorded for tenants without one.
+  const tenantOptions =
+    recordType === 'rent'
+      ? allottedTenants.filter((t) => t.rentStatus === 'pending' || t.rentStatus === 'partial')
+      : recordType === 'deposit'
+        ? activeTenants.filter((t) => !t.depositRecord)
+        : allottedTenants
+
+  useEffect(() => {
+    if (recordType === 'deposit' && depositCollected) setValue('recordType', 'rent')
+  }, [recordType, depositCollected, setValue])
 
   useEffect(() => {
     if (!selectedTenant) return
@@ -100,10 +116,10 @@ export function RecordPaymentPage() {
       setScreenshotFile(null)
       setScreenshotPreview(null)
     } else {
-      setValue('amount', selectedTenant.depositRecord?.amount ?? selectedTenant.deposit)
-      setValue('paymentDate', selectedTenant.depositRecord?.paidDate || todayIso())
+      setValue('amount', selectedTenant.deposit)
+      setValue('paymentDate', todayIso())
       setScreenshotFile(null)
-      setScreenshotPreview(selectedTenant.depositRecord?.screenshotUrl ?? null)
+      setScreenshotPreview(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTenantId, recordType, tenants])
@@ -164,7 +180,9 @@ export function RecordPaymentPage() {
       })
     } else {
       if (alreadyPaid) return
-      const forMonth = monthKeyOfDateString(values.paymentDate) + '-01'
+      // Rent belongs to the tenant's agreed-date cycle, not the calendar month
+      // the money happened to arrive in.
+      const forMonth = currentCycle(selectedTenant?.joiningDate ?? values.paymentDate).forMonth
       rentMutation.mutate({
         tenantId: values.tenantId,
         amount: values.amount,
@@ -180,7 +198,7 @@ export function RecordPaymentPage() {
   const handleRecordAnother = () => {
     setValue('tenantId', defaultTenantId ?? '')
     setValue('recordType', 'rent')
-    setValue('amount', 0)
+    setValue('amount', preselectedTenant?.rent ?? 0)
     setValue('paymentMode', 'cash')
     setValue('paymentDate', todayIso())
     setValue('notes', '')
@@ -258,7 +276,12 @@ export function RecordPaymentPage() {
             name="tenantId"
             control={control}
             render={({ field }) => (
-              <TenantCombobox tenants={tenantOptions} value={field.value} onChange={field.onChange} />
+              <TenantCombobox
+                tenants={tenantOptions}
+                value={field.value}
+                onChange={field.onChange}
+                emptyText={recordType === 'rent' ? 'No tenants with pending rent.' : 'No tenant found.'}
+              />
             )}
           />
         )}
@@ -271,8 +294,8 @@ export function RecordPaymentPage() {
           name="recordType"
           control={control}
           render={({ field }) => (
-            <div className="grid grid-cols-3 gap-2 rounded-lg border border-border/70 p-1">
-              {(['rent', 'deposit', 'other'] as const).map((type) => (
+            <div className={cn('grid gap-2 rounded-lg border border-border/70 p-1', recordTypes.length === 3 ? 'grid-cols-3' : 'grid-cols-2')}>
+              {recordTypes.map((type) => (
                 <button
                   key={type}
                   type="button"
@@ -293,18 +316,7 @@ export function RecordPaymentPage() {
       {alreadyPaid ? (
         <div className="flex items-start gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2.5 text-sm text-success">
           <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
-          <span>{selectedTenant?.name} has already paid rent for this month.</span>
-        </div>
-      ) : null}
-
-      {isDepositEdit ? (
-        <div className="flex items-start gap-2 rounded-lg border border-info/30 bg-info/10 px-3 py-2.5 text-sm text-info">
-          <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
-          <span>
-            Deposit already collected for {selectedTenant?.name}
-            {selectedTenant?.depositRecord ? ` on ${new Date(selectedTenant.depositRecord.paidDate).toLocaleDateString('en-IN')}` : ''}.
-            Saving here updates that record.
-          </span>
+          <span>{selectedTenant?.name} has already paid rent for this cycle.</span>
         </div>
       ) : null}
 
@@ -399,7 +411,7 @@ export function RecordPaymentPage() {
 
       <Button type="submit" className="w-full" disabled={isPending || alreadyPaid || !selectedTenantId}>
         {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-        {recordType === 'deposit' ? (isDepositEdit ? 'Update Deposit' : 'Save Deposit') : 'Record Payment'}
+        {recordType === 'deposit' ? 'Save Deposit' : 'Record Payment'}
       </Button>
     </form>
   )

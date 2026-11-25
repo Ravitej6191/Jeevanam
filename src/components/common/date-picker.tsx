@@ -49,6 +49,10 @@ export function DatePicker({
       <PopoverContent className="w-auto p-0" align="start">
         <Calendar
           mode="single"
+          captionLayout="dropdown"
+          defaultMonth={selected}
+          startMonth={new Date(1990, 0)}
+          endMonth={disableFuture ? new Date() : new Date(new Date().getFullYear() + 15, 11)}
           selected={selected}
           onSelect={(date) => {
             if (date) onChange(toIsoDate(date))

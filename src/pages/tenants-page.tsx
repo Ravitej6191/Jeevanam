@@ -30,7 +30,7 @@ export function TenantsPage() {
               ))}
             </div>
           ) : activeTenants.length === 0 ? (
-            <EmptyState icon={Users} title="No tenants yet" description="Add a tenant from the Building tab to see them here." />
+            <EmptyState icon={Users} title="No tenants yet" description="Add a tenant from the Residency tab to see them here." />
           ) : (
             activeTenants.map((tenant) => <TenantListItem key={tenant.id} tenant={tenant} />)
           )}

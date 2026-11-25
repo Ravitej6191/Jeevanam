@@ -13,7 +13,8 @@ import {
   type AddHouseInput,
   type UpdateHouseInput,
 } from '@/lib/demo-store'
-import type { TenantRow } from '@/types/database.types'
+import { getCycleStatuses } from '@/features/tenants/services/tenants.service'
+import type { RentStatus, TenantRow } from '@/types/database.types'
 import type { Tenant } from '@/types/domain'
 import type { OccupancyStatus } from '@/constants/status'
 import type { BuildingSummary, Floor, House } from '../types'
@@ -49,7 +50,6 @@ function getDemoData(): BuildingData {
             id: house.id,
             floorId: house.floorId,
             houseNumber: house.houseNumber,
-            houseType: house.houseType,
             gasConnectionNumber: house.gasConnectionNumber,
             electricityBillNumber: house.electricityBillNumber,
             tenant,
@@ -79,7 +79,7 @@ function getDemoData(): BuildingData {
 
 // ---- Real Supabase path (scaffolded; not yet exercised until connected) ----
 
-function mapTenantRow(row: TenantRow, houseNumber: string, floorName: string): Tenant {
+function mapTenantRow(row: TenantRow, houseNumber: string, floorName: string, rentStatus: RentStatus): Tenant {
   return {
     id: row.id,
     houseId: row.house_id,
@@ -96,7 +96,7 @@ function mapTenantRow(row: TenantRow, houseNumber: string, floorName: string): T
     advance: row.advance,
     deposit: row.deposit,
     rent: row.rent,
-    rentStatus: row.rent_status,
+    rentStatus,
     status: row.status,
     notes: row.notes,
     depositRecord:
@@ -155,6 +155,7 @@ async function fetchFromSupabase(): Promise<BuildingData> {
     .eq('status', 'active')
   if (tenantsError) throw tenantsError
 
+  const statusById = await getCycleStatuses(tenantRows)
   const houseNumberById = new Map(houseRows.map((h) => [h.id, h.house_number]))
   const floorIdByHouseId = new Map(houseRows.map((h) => [h.id, h.floor_id]))
   const floorNameById = new Map(floorRows.map((f) => [f.id, f.name]))
@@ -165,7 +166,7 @@ async function fetchFromSupabase(): Promise<BuildingData> {
     const floorId = floorIdByHouseId.get(row.house_id)
     const houseNumber = houseNumberById.get(row.house_id) ?? ''
     const floorName = (floorId && floorNameById.get(floorId)) || ''
-    tenantByHouseId.set(row.house_id, mapTenantRow(row, houseNumber, floorName))
+    tenantByHouseId.set(row.house_id, mapTenantRow(row, houseNumber, floorName, statusById.get(row.id) ?? 'pending'))
   }
 
   const housesByFloorId = new Map<string, House[]>()
@@ -175,7 +176,6 @@ async function fetchFromSupabase(): Promise<BuildingData> {
       id: houseRow.id,
       floorId: houseRow.floor_id,
       houseNumber: houseRow.house_number,
-      houseType: houseRow.house_type,
       gasConnectionNumber: houseRow.gas_connection_number,
       electricityBillNumber: houseRow.electricity_bill_number,
       tenant,
@@ -286,7 +286,6 @@ export async function createHouse(input: AddHouseInput): Promise<void> {
   const { error } = await supabase.from('houses').insert({
     floor_id: input.floorId,
     house_number: input.houseNumber,
-    house_type: input.houseType,
     gas_connection_number: input.gasConnectionNumber,
     electricity_bill_number: input.electricityBillNumber,
   })
@@ -303,7 +302,6 @@ export async function updateHouse(input: UpdateHouseInput): Promise<void> {
     .from('houses')
     .update({
       house_number: input.houseNumber,
-      house_type: input.houseType,
       gas_connection_number: input.gasConnectionNumber,
       electricity_bill_number: input.electricityBillNumber,
     })

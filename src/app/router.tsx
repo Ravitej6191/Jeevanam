@@ -1,45 +1,45 @@
-import { lazy, Suspense, type ReactNode } from 'react'
+import { Suspense, type ReactNode } from 'react'
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { AppLayout } from '@/layouts/app-layout'
 import { AuthLayout } from '@/layouts/auth-layout'
 import { ProtectedRoute } from './protected-route'
-import { OnboardingGate } from './onboarding-gate'
+import { BootstrapGate } from './bootstrap-gate'
+import { RouteError } from './route-error'
+import { lazyRetry } from './lazy-retry'
 
-const LoginPage = lazy(() => import('@/pages/login-page').then((m) => ({ default: m.LoginPage })))
-const OnboardingPage = lazy(() => import('@/pages/onboarding-page').then((m) => ({ default: m.OnboardingPage })))
-const DashboardPage = lazy(() => import('@/pages/dashboard-page').then((m) => ({ default: m.DashboardPage })))
-const BuildingPage = lazy(() => import('@/pages/building-page').then((m) => ({ default: m.BuildingPage })))
-const LoansPage = lazy(() => import('@/pages/loans-page').then((m) => ({ default: m.LoansPage })))
-const LoanDetailPage = lazy(() => import('@/pages/loan-detail-page').then((m) => ({ default: m.LoanDetailPage })))
-const RecordLoanRepaymentPage = lazy(() =>
+const LoginPage = lazyRetry(() => import('@/pages/login-page').then((m) => ({ default: m.LoginPage })))
+const DashboardPage = lazyRetry(() => import('@/pages/dashboard-page').then((m) => ({ default: m.DashboardPage })))
+const ResidencyPage = lazyRetry(() => import('@/pages/residency-page').then((m) => ({ default: m.ResidencyPage })))
+const LoansPage = lazyRetry(() => import('@/pages/loans-page').then((m) => ({ default: m.LoansPage })))
+const LoanDetailPage = lazyRetry(() => import('@/pages/loan-detail-page').then((m) => ({ default: m.LoanDetailPage })))
+const RecordLoanRepaymentPage = lazyRetry(() =>
   import('@/pages/record-loan-repayment-page').then((m) => ({ default: m.RecordLoanRepaymentPage })),
 )
-const TenantsPage = lazy(() => import('@/pages/tenants-page').then((m) => ({ default: m.TenantsPage })))
-const TenantDetailPage = lazy(() =>
+const TenantsPage = lazyRetry(() => import('@/pages/tenants-page').then((m) => ({ default: m.TenantsPage })))
+const TenantDetailPage = lazyRetry(() =>
   import('@/pages/tenant-detail-page').then((m) => ({ default: m.TenantDetailPage })),
 )
-const AddTenantPage = lazy(() => import('@/pages/add-tenant-page').then((m) => ({ default: m.AddTenantPage })))
-const RecordPaymentPage = lazy(() =>
+const AddTenantPage = lazyRetry(() => import('@/pages/add-tenant-page').then((m) => ({ default: m.AddTenantPage })))
+const RecordPaymentPage = lazyRetry(() =>
   import('@/pages/record-payment-page').then((m) => ({ default: m.RecordPaymentPage })),
 )
-const ExpensesPage = lazy(() => import('@/pages/expenses-page').then((m) => ({ default: m.ExpensesPage })))
-const AddExpensePage = lazy(() => import('@/pages/add-expense-page').then((m) => ({ default: m.AddExpensePage })))
-const BroadcastPage = lazy(() => import('@/pages/broadcast-page').then((m) => ({ default: m.BroadcastPage })))
-const SettingsPage = lazy(() => import('@/pages/settings-page').then((m) => ({ default: m.SettingsPage })))
-const PastTenantsPage = lazy(() =>
+const ExpensesPage = lazyRetry(() => import('@/pages/expenses-page').then((m) => ({ default: m.ExpensesPage })))
+const BroadcastPage = lazyRetry(() => import('@/pages/broadcast-page').then((m) => ({ default: m.BroadcastPage })))
+const SettingsPage = lazyRetry(() => import('@/pages/settings-page').then((m) => ({ default: m.SettingsPage })))
+const PastTenantsPage = lazyRetry(() =>
   import('@/pages/past-tenants-page').then((m) => ({ default: m.PastTenantsPage })),
 )
-const EditProfilePage = lazy(() =>
+const EditProfilePage = lazyRetry(() =>
   import('@/pages/edit-profile-page').then((m) => ({ default: m.EditProfilePage })),
 )
-const NotificationsPage = lazy(() =>
+const NotificationsPage = lazyRetry(() =>
   import('@/pages/notifications-page').then((m) => ({ default: m.NotificationsPage })),
 )
-const WhatsAppIntegrationPage = lazy(() =>
+const WhatsAppIntegrationPage = lazyRetry(() =>
   import('@/pages/whatsapp-integration-page').then((m) => ({ default: m.WhatsAppIntegrationPage })),
 )
-const NotFoundPage = lazy(() => import('@/pages/not-found-page').then((m) => ({ default: m.NotFoundPage })))
+const NotFoundPage = lazyRetry(() => import('@/pages/not-found-page').then((m) => ({ default: m.NotFoundPage })))
 
 function PageFallback() {
   return (
@@ -55,22 +55,25 @@ function withSuspense(element: ReactNode) {
 
 export const router = createBrowserRouter([
   {
+    errorElement: <RouteError />,
+    children: [
+  {
     element: <AuthLayout />,
     children: [{ path: '/login', element: withSuspense(<LoginPage />) }],
   },
   {
     element: <ProtectedRoute />,
     children: [
-      { path: '/onboarding', element: withSuspense(<OnboardingPage />) },
       {
-        element: <OnboardingGate />,
+        element: <BootstrapGate />,
         children: [
           {
             element: <AppLayout />,
             children: [
               { path: '/', element: <Navigate to="/dashboard" replace /> },
               { path: '/dashboard', element: withSuspense(<DashboardPage />) },
-              { path: '/building', element: withSuspense(<BuildingPage />) },
+              { path: '/residency', element: withSuspense(<ResidencyPage />) },
+              { path: '/building', element: <Navigate to="/residency" replace /> },
               { path: '/loans', element: withSuspense(<LoansPage />) },
               { path: '/loans/record-repayment', element: withSuspense(<RecordLoanRepaymentPage />) },
               { path: '/loans/:id', element: withSuspense(<LoanDetailPage />) },
@@ -80,8 +83,8 @@ export const router = createBrowserRouter([
               { path: '/tenants/:id', element: withSuspense(<TenantDetailPage />) },
               { path: '/tenants/:id/edit', element: withSuspense(<AddTenantPage />) },
               { path: '/expenses', element: withSuspense(<ExpensesPage />) },
-              { path: '/expenses/new', element: withSuspense(<AddExpensePage />) },
-              { path: '/expenses/:id/edit', element: withSuspense(<AddExpensePage />) },
+
+
               { path: '/broadcast', element: withSuspense(<BroadcastPage />) },
               { path: '/settings', element: withSuspense(<SettingsPage />) },
               { path: '/settings/past-tenants', element: withSuspense(<PastTenantsPage />) },
@@ -95,4 +98,6 @@ export const router = createBrowserRouter([
     ],
   },
   { path: '*', element: withSuspense(<NotFoundPage />) },
+    ],
+  },
 ])

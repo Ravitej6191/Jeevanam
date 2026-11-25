@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation } from '@tanstack/react-query'
 import { useTheme } from 'next-themes'
 import {
   Building2,
@@ -25,10 +25,12 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ConfirmSheet } from '@/components/common/confirm-sheet'
+import { ErrorState } from '@/components/common/error-state'
 import { PullToRefresh } from '@/components/common/pull-to-refresh'
 import { SetPinSheet } from '@/features/settings/components/set-pin-sheet'
 import { useBuildingData } from '@/features/building/hooks/use-building-data'
-import { clearAccountData, clearAppData } from '@/features/onboarding/services/onboarding.service'
+import { clearAccountData } from '@/features/onboarding/services/onboarding.service'
+import { wipeLocalDataAndRestart } from '@/lib/local-data'
 import { applyThemeColor, getStoredThemeColor, themeColorPresets } from '@/constants/theme-colors'
 import { isBiometricAvailable, registerBiometricCredential } from '@/lib/biometric-auth'
 import { useAuth } from '@/providers/auth-provider'
@@ -37,10 +39,9 @@ import { usePageTitle } from '@/hooks/use-page-title'
 
 export function SettingsPage() {
   const navigate = useNavigate()
-  usePageTitle('Settings', () => navigate(-1))
-  const queryClient = useQueryClient()
+  usePageTitle('Settings')
   const { resolvedTheme, setTheme } = useTheme()
-  const { data, refetch } = useBuildingData()
+  const { data, isError: isBuildingError, refetch } = useBuildingData()
   const { user, isDemoMode, logout } = useAuth()
   const [clearDataOpen, setClearDataOpen] = useState(false)
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false)
@@ -58,21 +59,24 @@ export function SettingsPage() {
     void isBiometricAvailable().then(setBiometricSupported)
   }, [])
 
-  const clearDataMutation = useMutation({
-    mutationFn: clearAppData,
-    onSuccess: () => {
-      queryClient.clear()
-      toast.success('App data cleared')
+  // Reset only touches this device: sign out (best effort — a demo or
+  // already-expired session just no-ops), then wipe all local storage and
+  // reload to the login screen. Cloud data stays and returns on next sign-in.
+  const resetDataMutation = useMutation({
+    mutationFn: async () => {
+      await logout().catch(() => undefined)
     },
-    onError: () => toast.error('Could not clear your data. Please try again.'),
+    onSettled: () => wipeLocalDataAndRestart(),
   })
 
+  // Delete removes the cloud account first; if that fails nothing local is
+  // touched. Demo mode has no cloud, so it just wipes local data.
   const deleteAccountMutation = useMutation({
-    mutationFn: clearAccountData,
-    onSuccess: async () => {
-      await logout()
-      toast.success('Account deleted')
+    mutationFn: async () => {
+      await clearAccountData()
+      await logout().catch(() => undefined)
     },
+    onSuccess: () => wipeLocalDataAndRestart(),
     onError: () => toast.error('Could not delete your account. Please try again.'),
   })
 
@@ -97,7 +101,14 @@ export function SettingsPage() {
       <div className="space-y-5">
       <Card className="border-border">
         <CardContent className="space-y-4">
-          {data ? (
+          {isBuildingError ? (
+            <ErrorState
+              title="Couldn't load your profile"
+              description="Please try again."
+              onRetry={() => refetch()}
+              className="rounded-lg border-none bg-transparent px-0 py-4"
+            />
+          ) : data ? (
             <>
               <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-2.5">
@@ -127,7 +138,11 @@ export function SettingsPage() {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Phone</p>
-                  <p className="truncate font-medium text-foreground">{data.building.contactPhone || '—'}</p>
+                  <p className="truncate font-medium text-foreground">{data.building.contactPhone || user?.phone || '—'}</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-xs text-muted-foreground">Email</p>
+                  <p className="truncate font-medium text-foreground">{data.building.contactEmail || user?.email || '—'}</p>
                 </div>
                 <div className="col-span-2">
                   <p className="text-xs text-muted-foreground">Address</p>
@@ -254,8 +269,7 @@ export function SettingsPage() {
               <ChevronRight className="size-4 text-muted-foreground" />
             </button>
 
-            {isDemoMode ? null : (
-              <>
+            <>
                 <button
                   type="button"
                   onClick={() => setClearDataOpen(true)}
@@ -264,7 +278,7 @@ export function SettingsPage() {
                   <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-warning/10 text-warning">
                     <Trash2 className="size-4" />
                   </span>
-                  <span className="flex-1 text-sm font-medium text-foreground">Clear App Data</span>
+                  <span className="flex-1 text-sm font-medium text-foreground">Reset App Data</span>
                   <ChevronRight className="size-4 text-muted-foreground" />
                 </button>
 
@@ -279,8 +293,7 @@ export function SettingsPage() {
                   <span className="flex-1 text-sm font-medium text-danger">Delete Account</span>
                   <ChevronRight className="size-4 text-muted-foreground" />
                 </button>
-              </>
-            )}
+            </>
           </div>
         </CardContent>
       </Card>
@@ -304,27 +317,29 @@ export function SettingsPage() {
       <ConfirmSheet
         open={clearDataOpen}
         onOpenChange={setClearDataOpen}
-        title="Clear all app data?"
-        description="This permanently deletes your tenants, floors, houses, payments, expenses, and every other record. Your building profile stays as-is, so you won't have to set up again. This can't be undone."
-        confirmLabel="Clear Data"
-        isPending={clearDataMutation.isPending}
-        onConfirm={() => {
-          clearDataMutation.mutate()
-          setClearDataOpen(false)
-        }}
+        title="Reset app data?"
+        description={
+          isDemoMode
+            ? 'This deletes everything stored on this device — all demo data and settings — and returns you to the login screen. This cannot be undone.'
+            : 'This deletes everything stored on this device — settings, App Lock, and your session — and signs you out. Your cloud data is kept and comes back when you sign in again.'
+        }
+        confirmLabel="Reset"
+        isPending={resetDataMutation.isPending}
+        onConfirm={() => resetDataMutation.mutate()}
       />
 
       <ConfirmSheet
         open={deleteAccountOpen}
         onOpenChange={setDeleteAccountOpen}
         title="Delete your account?"
-        description="This permanently removes all your data — building, tenants, payments, expenses, everything — and signs you out. This can't be undone."
+        description={
+          isDemoMode
+            ? 'This deletes everything stored on this device and returns you to the login screen. This cannot be undone.'
+            : 'This permanently deletes your account and all your data — residency, tenants, payments, expenses, uploaded photos — from the cloud and this device. This cannot be undone.'
+        }
         confirmLabel="Delete Account"
         isPending={deleteAccountMutation.isPending}
-        onConfirm={() => {
-          deleteAccountMutation.mutate()
-          setDeleteAccountOpen(false)
-        }}
+        onConfirm={() => deleteAccountMutation.mutate()}
       />
 
       <SetPinSheet open={setPinOpen} onOpenChange={setSetPinOpen} />

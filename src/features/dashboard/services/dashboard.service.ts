@@ -1,6 +1,7 @@
 import { isDemoSession } from '@/config/env'
 import { supabase } from '@/lib/supabase'
-import { getDemoDb } from '@/lib/demo-store'
+import { getDemoDb, resolveTenant } from '@/lib/demo-store'
+import { getCycleStatuses } from '@/features/tenants/services/tenants.service'
 import { dateOnlyIso, monthKey as monthKeyOf, monthKeyOfDateString as monthKey } from '@/utils/format'
 import type { DashboardData, DashboardRange, IncomeExpenseTrendPoint } from '../types'
 
@@ -79,10 +80,13 @@ function getDemoData(range: DashboardRange): DashboardData {
   const nowKey = currentMonthKey()
 
   const paymentsThisMonth = db.payments.filter((p) => monthKey(p.paymentDate) === nowKey)
-  const thisMonthTotal = paymentsThisMonth.reduce((sum, p) => sum + p.amount, 0)
+  const thisMonthTotal =
+    paymentsThisMonth.reduce((sum, p) => sum + p.amount, 0) +
+    db.incomes.filter((i) => monthKey(i.incomeDate) === nowKey).reduce((sum, i) => sum + i.amount, 0)
 
   const activeTenants = db.tenants.filter((t) => t.status === 'active')
   const pendingRent = activeTenants
+    .map((t) => resolveTenant(db, t))
     .filter((t) => t.rentStatus === 'pending')
     .reduce((sum, t) => sum + t.rent, 0)
 
@@ -104,17 +108,21 @@ function getDemoData(range: DashboardRange): DashboardData {
 
   let trend: IncomeExpenseTrendPoint[]
   if (range === 'all') {
-    const earliestDate = [...db.payments.map((p) => p.paymentDate), ...db.expenses.map((e) => e.expenseDate)].sort()[0] ?? null
+    const earliestDate = [...db.payments.map((p) => p.paymentDate), ...db.incomes.map((i) => i.incomeDate), ...db.expenses.map((e) => e.expenseDate)].sort()[0] ?? null
     trend = allMonthKeysSince(earliestDate).map((key) => ({
       label: monthLabel(key),
-      income: db.payments.filter((p) => monthKey(p.paymentDate) === key).reduce((s, p) => s + p.amount, 0),
+      income:
+        db.payments.filter((p) => monthKey(p.paymentDate) === key).reduce((s, p) => s + p.amount, 0) +
+        db.incomes.filter((i) => monthKey(i.incomeDate) === key).reduce((s, i) => s + i.amount, 0),
       expenses: db.expenses.filter((e) => monthKey(e.expenseDate) === key).reduce((s, e) => s + e.amount, 0),
     }))
   } else {
     const dayKeys = range === 'week' ? dayKeysBack(7) : range === 'fortnight' ? dayKeysBack(15) : dayKeysThisMonth()
     trend = dayKeys.map((key) => ({
       label: dayLabel(key),
-      income: db.payments.filter((p) => p.paymentDate === key).reduce((s, p) => s + p.amount, 0),
+      income:
+        db.payments.filter((p) => p.paymentDate === key).reduce((s, p) => s + p.amount, 0) +
+        db.incomes.filter((i) => i.incomeDate === key).reduce((s, i) => s + i.amount, 0),
       expenses: db.expenses.filter((e) => e.expenseDate === key).reduce((s, e) => s + e.amount, 0),
     }))
   }
@@ -162,7 +170,7 @@ async function fetchFromSupabase(range: DashboardRange): Promise<DashboardData> 
   // avoids relying solely on RLS for building isolation).
   const { data: tenantRows, error: tenantsError } = await supabase
     .from('tenants')
-    .select('id, rent, rent_status, status, deposit_paid_amount, house_id')
+    .select('id, rent, joining_date, status, deposit_paid_amount, house_id')
     .eq('building_id', buildingRow.id)
   if (tenantsError) throw tenantsError
   const tenantIds = tenantRows.map((t) => t.id)
@@ -170,7 +178,7 @@ async function fetchFromSupabase(range: DashboardRange): Promise<DashboardData> 
   // list is empty, so short-circuit to an empty result instead.
   const noPayments = () => Promise.resolve({ data: [] as never[], error: null })
 
-  const [monthPayments, monthExpenses, houseRows, loanRows] = await Promise.all([
+  const [monthPayments, monthExpenses, houseRows, loanRows, monthIncomes] = await Promise.all([
     tenantIds.length > 0
       ? supabase.from('payments').select('amount').in('tenant_id', tenantIds).gte('payment_date', startOfMonthIso())
       : noPayments(),
@@ -181,9 +189,11 @@ async function fetchFromSupabase(range: DashboardRange): Promise<DashboardData> 
       .gte('expense_date', startOfMonthIso()),
     supabase.from('houses').select('id', { count: 'exact', head: true }),
     supabase.from('loans').select('id, amount').eq('building_id', buildingRow.id),
+    supabase.from('incomes').select('amount').eq('building_id', buildingRow.id).gte('income_date', startOfMonthIso()),
   ])
   if (houseRows.error) throw houseRows.error
   if (loanRows.error) throw loanRows.error
+  if (monthIncomes.error) throw monthIncomes.error
 
   const loanIds = loanRows.data.map((l) => l.id)
   const loanRepayments =
@@ -202,12 +212,13 @@ async function fetchFromSupabase(range: DashboardRange): Promise<DashboardData> 
   const activeLoansCount = loanStillToPay.filter((v) => v > 0).length
 
   const activeTenants = tenantRows.filter((t) => t.status === 'active')
+  const cycleStatuses = await getCycleStatuses(activeTenants)
   const pendingRent = activeTenants
-    .filter((t) => t.rent_status === 'pending')
+    .filter((t) => cycleStatuses.get(t.id) === 'pending')
     .reduce((s, t) => s + t.rent, 0)
   const pendingDepositsCount = activeTenants.filter((t) => t.deposit_paid_amount === null).length
 
-  const thisMonthTotal = sum(monthPayments.data)
+  const thisMonthTotal = sum(monthPayments.data) + sum(monthIncomes.data)
   const monthlyExpense = sum(monthExpenses.data)
   const totalHouses = houseRows.count ?? 0
   const occupiedCount = activeTenants.filter((t) => t.house_id !== null).length
@@ -217,7 +228,7 @@ async function fetchFromSupabase(range: DashboardRange): Promise<DashboardData> 
   // for week/fortnight/month, or "since the earliest record" for all time.
   let windowStart = rangeStartDate(range)
   if (range === 'all') {
-    const [earliestPayment, earliestExpense] = await Promise.all([
+    const [earliestPayment, earliestExpense, earliestIncome] = await Promise.all([
       tenantIds.length > 0
         ? supabase.from('payments').select('payment_date').in('tenant_id', tenantIds).order('payment_date', { ascending: true }).limit(1)
         : noPayments(),
@@ -227,14 +238,24 @@ async function fetchFromSupabase(range: DashboardRange): Promise<DashboardData> 
         .eq('building_id', buildingRow.id)
         .order('expense_date', { ascending: true })
         .limit(1),
+      supabase
+        .from('incomes')
+        .select('income_date')
+        .eq('building_id', buildingRow.id)
+        .order('income_date', { ascending: true })
+        .limit(1),
     ])
     windowStart =
-      [earliestPayment.data?.[0]?.payment_date, earliestExpense.data?.[0]?.expense_date]
+      [
+        earliestPayment.data?.[0]?.payment_date,
+        earliestExpense.data?.[0]?.expense_date,
+        earliestIncome.data?.[0]?.income_date,
+      ]
         .filter((d): d is string => Boolean(d))
         .sort()[0] ?? null
   }
 
-  const [windowPayments, windowExpenses] = await Promise.all([
+  const [windowPayments, windowExpenses, windowIncomes] = await Promise.all([
     tenantIds.length > 0
       ? (() => {
           let q = supabase.from('payments').select('amount, payment_date').in('tenant_id', tenantIds)
@@ -247,11 +268,21 @@ async function fetchFromSupabase(range: DashboardRange): Promise<DashboardData> 
       if (windowStart) q = q.gte('expense_date', windowStart)
       return q
     })(),
+    (() => {
+      let q = supabase.from('incomes').select('amount, income_date').eq('building_id', buildingRow.id)
+      if (windowStart) q = q.gte('income_date', windowStart)
+      return q
+    })(),
   ])
   if (windowPayments.error) throw windowPayments.error
   if (windowExpenses.error) throw windowExpenses.error
+  if (windowIncomes.error) throw windowIncomes.error
 
-  const payments = windowPayments.data ?? []
+  // Non-tenant income counts toward the same Income series as rent payments.
+  const payments = [
+    ...(windowPayments.data ?? []),
+    ...(windowIncomes.data ?? []).map((i) => ({ amount: i.amount, payment_date: i.income_date })),
+  ]
   const expenses = windowExpenses.data ?? []
 
   let trend: IncomeExpenseTrendPoint[]

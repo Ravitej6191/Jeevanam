@@ -4,22 +4,24 @@ import {
   ImageIcon,
   Lightbulb,
   Milk,
+  Carrot,
+  Receipt,
+  ShoppingBasket,
   Sofa,
   Sparkles,
   Users,
   Utensils,
-  Wallet,
   Wifi,
   type LucideIcon,
 } from 'lucide-react'
-import { formatCurrency, formatDateTime } from '@/utils/format'
-import type { Expense, ExpenseCategory } from '../types'
+import { formatCurrency, formatDate } from '@/utils/format'
+import { expenseCategoryOptions, type Expense, type ExpenseCategory } from '../types'
 
 const iconByCategory: Record<ExpenseCategory, LucideIcon> = {
   food: Utensils,
-  groceries: Wallet,
+  groceries: ShoppingBasket,
   milk: Milk,
-  vegetables: Wallet,
+  vegetables: Carrot,
   gas: Flame,
   electricity: Lightbulb,
   internet: Wifi,
@@ -27,7 +29,7 @@ const iconByCategory: Record<ExpenseCategory, LucideIcon> = {
   repairs: Hammer,
   furniture: Sofa,
   salary: Users,
-  misc: Wallet,
+  misc: Receipt,
 }
 
 const colorByCategory: Record<ExpenseCategory, string> = {
@@ -63,9 +65,11 @@ export function ExpenseListItem({ expense, onSelect }: ExpenseListItemProps) {
         <Icon className="size-4" />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-foreground capitalize">{expense.category}</p>
+        <p className="truncate text-sm font-medium text-foreground">
+          {expenseCategoryOptions.find((o) => o.value === expense.category)?.label ?? expense.category}
+        </p>
         <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
-          {formatDateTime(expense.createdAt)}
+          {formatDate(expense.expenseDate)}
           {expense.description ? ` · ${expense.description}` : ''}
           {expense.imageUrls.length > 0 ? (
             <span className="inline-flex items-center gap-0.5 text-muted-foreground/80">

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, type NavigateFunction } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { AlertTriangle, Banknote, Building2, ChevronRight, HandCoins, IndianRupee, Landmark, UserPlus } from 'lucide-react'
+import { AlertTriangle, Banknote, Building2, ChevronRight, IndianRupee, Landmark, UserPlus } from 'lucide-react'
 import { ChartCard } from '@/components/common/chart-card'
 import { ErrorState } from '@/components/common/error-state'
 import { PullToRefresh } from '@/components/common/pull-to-refresh'
@@ -11,7 +11,7 @@ import { useDashboardData } from '@/features/dashboard/hooks/use-dashboard-data'
 import { useBuildingData } from '@/features/building/hooks/use-building-data'
 import { StatCard } from '@/features/dashboard/components/stat-card'
 import { QuickActions } from '@/features/dashboard/components/quick-actions'
-import { IncomeExpenseChart } from '@/features/dashboard/components/income-expense-chart'
+import { MoneyBreakdown } from '@/features/dashboard/components/money-breakdown'
 import type { DashboardRange } from '@/features/dashboard/types'
 import { formatCurrency } from '@/utils/format'
 import { getTimeOfDayGreeting } from '@/utils/greeting'
@@ -43,13 +43,13 @@ export function DashboardPage() {
             {greeting}
             {building?.building.ownerName ? `, ${building.building.ownerName.split(' ')[0]}` : user ? `, ${user.name.split(' ')[0]}` : ''}
           </h2>
-          {building ? <p className="mt-0.5 text-sm text-muted-foreground">Here's how {building.building.name} is doing</p> : null}
+          {building ? <p className="mt-0.5 text-sm text-muted-foreground">Your financial journey at a glance</p> : null}
         </div>
 
         <QuickActions
           onRecordPayment={() => navigate('/tenants/record-payment')}
           onRecordLoan={() => navigate('/loans/record-repayment')}
-          onAddExpense={() => navigate('/expenses/new')}
+          onAddExpense={() => navigate('/expenses?add=expense')}
           onBroadcast={() => navigate('/broadcast')}
         />
 
@@ -65,34 +65,25 @@ export function DashboardPage() {
               initial="hidden"
               animate="show"
               variants={{ hidden: {}, show: { transition: { staggerChildren: 0.04 } } }}
-              className="grid grid-cols-3 gap-2.5"
-            >
-              {[
-                { icon: IndianRupee, label: 'Income This Month', value: formatCurrency(data.stats.incomeThisMonth), tone: 'primary' as const },
-                { icon: Banknote, label: 'Expense This Month', value: formatCurrency(data.stats.monthlyExpense), tone: 'warning' as const },
-                { icon: AlertTriangle, label: 'Pending Rents', value: formatCurrency(data.stats.pendingRent), tone: 'danger' as const },
-              ].map((stat) => (
-                <motion.div key={stat.label} variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }}>
-                  <StatCard icon={stat.icon} label={stat.label} value={stat.value} tone={stat.tone} />
-                </motion.div>
-              ))}
-            </motion.div>
-
-            <motion.div
-              initial="hidden"
-              animate="show"
-              variants={{ hidden: {}, show: { transition: { staggerChildren: 0.04 } } }}
               className="grid grid-cols-2 gap-2.5"
             >
               {[
-                { icon: HandCoins, label: 'Loan Paid Till Now', value: formatCurrency(data.stats.loanPaidTillNow), tone: 'info' as const },
-                { icon: Landmark, label: 'Outstanding (All Loans)', value: formatCurrency(data.stats.loanOutstanding), tone: 'danger' as const },
+                { icon: IndianRupee, label: 'Income', value: formatCurrency(data.stats.incomeThisMonth), tone: 'primary' as const },
+                { icon: Banknote, label: 'Expense', value: formatCurrency(data.stats.monthlyExpense), tone: 'warning' as const },
+                { icon: AlertTriangle, label: 'Pending Rents', value: formatCurrency(data.stats.pendingRent), tone: 'danger' as const },
+                {
+                  icon: Landmark,
+                  label: 'Loan Outstanding',
+                  value: formatCurrency(data.stats.loanOutstanding),
+                  tone: 'danger' as const,
+                  onClick: () => navigate('/loans'),
+                },
               ].map((stat) => (
                 <motion.div
                   key={stat.label}
                   variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }}
-                  onClick={() => navigate('/loans')}
-                  className="cursor-pointer"
+                  onClick={stat.onClick}
+                  className={stat.onClick ? 'cursor-pointer' : undefined}
                 >
                   <StatCard icon={stat.icon} label={stat.label} value={stat.value} tone={stat.tone} />
                 </motion.div>
@@ -100,7 +91,7 @@ export function DashboardPage() {
             </motion.div>
 
             <ChartCard
-              title="Income vs Expenses"
+              title="Income & Expenses"
               action={
                 <Select value={range} onValueChange={(value) => setRange(value as DashboardRange)}>
                   <SelectTrigger size="sm" className="w-[128px]">
@@ -121,7 +112,7 @@ export function DashboardPage() {
                   No income or expenses recorded yet.
                 </p>
               ) : (
-                <IncomeExpenseChart data={data.trend} />
+                <MoneyBreakdown data={data} />
               )}
             </ChartCard>
           </>
@@ -137,7 +128,7 @@ function SetupChecklist({ navigate }: { navigate: NavigateFunction }) {
       icon: Building2,
       label: 'Add a floor and your first house',
       description: 'Set up where your tenants will stay.',
-      onClick: () => navigate('/building'),
+      onClick: () => navigate('/residency'),
     },
     {
       icon: UserPlus,
@@ -184,13 +175,8 @@ function SetupChecklist({ navigate }: { navigate: NavigateFunction }) {
 function DashboardSkeleton() {
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-3 gap-2.5">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-24 rounded-xl" />
-        ))}
-      </div>
       <div className="grid grid-cols-2 gap-2.5">
-        {Array.from({ length: 2 }).map((_, i) => (
+        {Array.from({ length: 4 }).map((_, i) => (
           <Skeleton key={i} className="h-24 rounded-xl" />
         ))}
       </div>

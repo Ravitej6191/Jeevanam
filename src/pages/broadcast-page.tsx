@@ -86,11 +86,12 @@ export function BroadcastPage() {
       { value: 'pending_deposit', label: 'Pending Deposit' },
     ]
     const floors = (building?.floors ?? []).map((f) => ({ value: `floor:${f.id}`, label: f.name }))
-    const houses = (building?.floors ?? []).flatMap((f) =>
-      f.houses.map((h) => ({ value: `house:${h.id}`, label: `${f.name} · House ${h.houseNumber}` })),
-    )
-    return { general, floors, houses }
-  }, [building])
+    const tenants = allTenants
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((t) => ({ value: `tenant:${t.id}`, label: `${t.name} · House ${t.houseNumber}` }))
+    return { general, floors, tenants }
+  }, [building, allTenants])
 
   const {
     control,
@@ -127,14 +128,9 @@ export function BroadcastPage() {
         label: floor?.name ?? 'Floor',
       }
     }
-    if (audience.startsWith('house:')) {
-      const houseId = audience.slice('house:'.length)
-      return {
-        phones: allTenants.filter((t) => t.houseId === houseId).map((t) => t.phone),
-        label: allTenants.find((t) => t.houseId === houseId)
-          ? `House ${allTenants.find((t) => t.houseId === houseId)?.houseNumber}`
-          : 'House',
-      }
+    if (audience.startsWith('tenant:')) {
+      const tenant = allTenants.find((t) => t.id === audience.slice('tenant:'.length))
+      return { phones: tenant ? [tenant.phone] : [], label: tenant?.name ?? 'Tenant' }
     }
     return { phones: [], label: 'Unknown' }
   }
@@ -204,10 +200,10 @@ export function BroadcastPage() {
                     ))}
                   </SelectGroup>
                 ) : null}
-                {audienceGroups.houses.length > 0 ? (
+                {audienceGroups.tenants.length > 0 ? (
                   <SelectGroup>
-                    <SelectLabel>By House</SelectLabel>
-                    {audienceGroups.houses.map((option) => (
+                    <SelectLabel>Tenants</SelectLabel>
+                    {audienceGroups.tenants.map((option) => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}
                       </SelectItem>

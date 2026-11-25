@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Controller, useForm } from 'react-hook-form'
+import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
@@ -9,17 +9,11 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createHouse, updateHouse } from '../services/building.service'
-import { houseTypeOptions } from '../types'
-import type { HouseType } from '@/types/database.types'
 import type { House } from '../types'
-
-const houseTypeValues = houseTypeOptions.map((o) => o.value) as [HouseType, ...HouseType[]]
 
 const houseSchema = z.object({
   houseNumber: z.string().min(1, 'Enter a house number'),
-  houseType: z.enum(houseTypeValues),
   gasConnectionNumber: z.string().min(1, 'Enter a gas connection number'),
   electricityBillNumber: z.string().min(1, 'Enter an electricity bill number'),
 })
@@ -40,7 +34,6 @@ export function AddHouseSheet({ open, onOpenChange, floorId, floorLabel, existin
 
   const {
     register,
-    control,
     handleSubmit,
     reset,
     formState: { errors },
@@ -48,7 +41,6 @@ export function AddHouseSheet({ open, onOpenChange, floorId, floorLabel, existin
     resolver: zodResolver(houseSchema),
     defaultValues: {
       houseNumber: '',
-      houseType: '1bhk',
       gasConnectionNumber: '',
       electricityBillNumber: '',
     },
@@ -59,15 +51,13 @@ export function AddHouseSheet({ open, onOpenChange, floorId, floorLabel, existin
     if (existingHouse) {
       reset({
         houseNumber: existingHouse.houseNumber,
-        houseType: existingHouse.houseType,
         gasConnectionNumber: existingHouse.gasConnectionNumber ?? '',
         electricityBillNumber: existingHouse.electricityBillNumber ?? '',
       })
     } else {
       reset({
         houseNumber: '',
-        houseType: '1bhk',
-        gasConnectionNumber: '',
+          gasConnectionNumber: '',
         electricityBillNumber: '',
       })
     }
@@ -81,7 +71,6 @@ export function AddHouseSheet({ open, onOpenChange, floorId, floorLabel, existin
         return updateHouse({
           id: existingHouse.id,
           houseNumber: values.houseNumber,
-          houseType: values.houseType,
           gasConnectionNumber,
           electricityBillNumber,
         })
@@ -90,7 +79,6 @@ export function AddHouseSheet({ open, onOpenChange, floorId, floorLabel, existin
       return createHouse({
         floorId,
         houseNumber: values.houseNumber,
-        houseType: values.houseType,
         gasConnectionNumber,
         electricityBillNumber,
       })
@@ -118,35 +106,6 @@ export function AddHouseSheet({ open, onOpenChange, floorId, floorLabel, existin
             <Label htmlFor="houseNumber">House number</Label>
             <Input id="houseNumber" placeholder="G1" {...register('houseNumber')} />
             {errors.houseNumber ? <p className="text-xs text-danger">{errors.houseNumber.message}</p> : null}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>House type</Label>
-            <Controller
-              name="houseType"
-              control={control}
-              render={({ field }) => (
-                // key={field.value} forces Radix's Select to remount instead
-                // of receiving the new value as a prop change — when the
-                // value is set programmatically (react-hook-form's reset()
-                // when editing an existing house) rather than by the user
-                // opening the dropdown, Radix doesn't recognize it and
-                // silently fires onValueChange('') to "correct" itself,
-                // wiping the value we just set. Remounting sidesteps that.
-                <Select key={field.value} value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {houseTypeOptions.map((t) => (
-                      <SelectItem key={t.value} value={t.value}>
-                        {t.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            />
           </div>
 
           <div className="space-y-1.5">

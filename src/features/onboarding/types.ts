@@ -11,5 +11,6 @@ export interface OnboardingInput {
   pincode: string
   ownerName: string
   phone: string
+  email: string
 }
 

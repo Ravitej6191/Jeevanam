@@ -1,34 +1,37 @@
-# React + TypeScript + Vite
+# Jeevanam
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Rent, loans and expense tracking for a residency / PG owner. React 19 + TypeScript + Vite, Tailwind v4, TanStack Query, Supabase (auth, Postgres, storage) and Capacitor for Android.
 
-Currently, two official plugins are available:
+## Run locally
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```powershell
+npm install
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
-"# Jeevanam" 
-"# Jeevanam" 
+With no Supabase credentials the app runs in **demo mode**: everything is stored in the browser (`localStorage`).
+
+## Connect Supabase
+
+1. Create a Supabase project and run `supabase/setup-all.sql` in the SQL editor (it is the migrations in `supabase/migrations`, in order).
+2. Copy `.env.example` to `.env` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+3. Enable the Google provider under Authentication → Providers, and add these redirect URLs: your site URL, `http://localhost:5173/**` and `com.jeevanam.app://login-callback` (Android).
+
+## Scripts
+
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Dev server |
+| `npm run build` | Type-check and production build |
+| `npm run lint` | Oxlint |
+| `npm test` | Vitest |
+| `npx cap sync android` | Copy the build into the Android project |
+
+## Layout
+
+- `src/pages` – one file per route
+- `src/features/<area>` – components, hooks, services and types per feature (each service has a demo branch and a Supabase branch)
+- `src/components` – shared UI (`ui` = primitives, `common` = app components)
+- `src/lib/demo-store.ts` – the local demo database
+- `supabase` – migrations and seed
+- `server` – optional WhatsApp broadcast server

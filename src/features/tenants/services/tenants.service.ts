@@ -10,14 +10,17 @@ import {
   recordPayment as demoRecordPayment,
   resolveTenant,
   unassignTenant as demoUnassignTenant,
+  updatePayment as demoUpdatePayment,
   updateTenant as demoUpdateTenant,
   vacateTenant as demoVacateTenant,
   type AddTenantInput as DemoAddTenantInput,
   type RecordDepositInput as DemoRecordDepositInput,
+  type UpdatePaymentInput as DemoUpdatePaymentInput,
   type UpdateTenantInput as DemoUpdateTenantInput,
 } from '@/lib/demo-store'
 import { pushSupabaseNotification } from '@/features/notifications/services/notifications.service'
-import { formatCurrency, monthKey, todayIso } from '@/utils/format'
+import { formatCurrency, todayIso } from '@/utils/format'
+import { currentCycle } from '@/utils/rent-cycle'
 import type { PaymentMode, RentStatus, TenantRow } from '@/types/database.types'
 import type { Tenant } from '@/types/domain'
 
@@ -26,7 +29,32 @@ function computeRentStatus(rent: number, paidThisMonth: number): RentStatus {
   return paidThisMonth >= rent ? 'paid' : 'partial'
 }
 
-function mapTenantRow(row: TenantRow, houseNumber: string, floorName: string, paidThisMonth = 0): Tenant {
+/** Rent status of each tenant for the cycle they're currently in — derived
+ * from payments (never trusted from the stored column, which goes stale the
+ * moment a new cycle starts). */
+export async function getCycleStatuses(
+  tenantRows: { id: string; rent: number; joining_date: string }[],
+): Promise<Map<string, RentStatus>> {
+  const statuses = new Map<string, RentStatus>()
+  if (tenantRows.length === 0) return statuses
+
+  const cycleKeyByTenant = new Map(tenantRows.map((t) => [t.id, currentCycle(t.joining_date).forMonth]))
+  const { data, error } = await supabase
+    .from('payments')
+    .select('tenant_id, amount, for_month')
+    .in('tenant_id', tenantRows.map((t) => t.id))
+    .in('for_month', Array.from(new Set(cycleKeyByTenant.values())))
+  if (error) throw error
+
+  const paid = new Map<string, number>()
+  for (const p of data) {
+    if (p.for_month === cycleKeyByTenant.get(p.tenant_id)) paid.set(p.tenant_id, (paid.get(p.tenant_id) ?? 0) + p.amount)
+  }
+  for (const t of tenantRows) statuses.set(t.id, computeRentStatus(t.rent, paid.get(t.id) ?? 0))
+  return statuses
+}
+
+function mapTenantRow(row: TenantRow, houseNumber: string, floorName: string, rentStatus: RentStatus): Tenant {
   return {
     id: row.id,
     houseId: row.house_id,
@@ -43,7 +71,7 @@ function mapTenantRow(row: TenantRow, houseNumber: string, floorName: string, pa
     advance: row.advance,
     deposit: row.deposit,
     rent: row.rent,
-    rentStatus: computeRentStatus(row.rent, paidThisMonth),
+    rentStatus,
     status: row.status,
     notes: row.notes,
     depositRecord:
@@ -98,24 +126,12 @@ export async function getTenants(): Promise<Tenant[]> {
   const houseById = new Map(houses.map((h) => [h.id, h]))
   const floorNameById = new Map(floors.map((f) => [f.id, f.name]))
 
-  const tenantIds = tenantRows.map((t) => t.id)
-  const paidThisMonthByTenantId = new Map<string, number>()
-  if (tenantIds.length > 0) {
-    const { data: currentMonthPayments, error: paymentsError } = await supabase
-      .from('payments')
-      .select('tenant_id, amount')
-      .in('tenant_id', tenantIds)
-      .eq('for_month', currentMonthForMonth())
-    if (paymentsError) throw paymentsError
-    for (const payment of currentMonthPayments) {
-      paidThisMonthByTenantId.set(payment.tenant_id, (paidThisMonthByTenantId.get(payment.tenant_id) ?? 0) + payment.amount)
-    }
-  }
+  const statusById = await getCycleStatuses(tenantRows)
 
   return tenantRows.map((row) => {
     const house = row.house_id ? houseById.get(row.house_id) : undefined
     const floorName = house ? (floorNameById.get(house.floor_id) ?? '') : ''
-    return mapTenantRow(row, house?.house_number ?? '', floorName, paidThisMonthByTenantId.get(row.id) ?? 0)
+    return mapTenantRow(row, house?.house_number ?? '', floorName, statusById.get(row.id) ?? 'pending')
   })
 }
 
@@ -218,6 +234,7 @@ export async function createTenant(input: CreateTenantInput): Promise<string> {
       aadhaar_number: input.aadhaarNumber,
       occupation: input.occupation,
       photo_url: input.photoUrl,
+      joining_date: input.joiningDate ?? todayIso(),
       rent: input.rent,
       deposit: input.deposit,
     })
@@ -232,34 +249,10 @@ export async function createTenant(input: CreateTenantInput): Promise<string> {
 
 export type UpdateTenantInput = DemoUpdateTenantInput
 
-function currentMonthForMonth(): string {
-  return `${monthKey(new Date())}-01`
-}
-
 export async function updateTenant(input: UpdateTenantInput): Promise<void> {
   if (isDemoSession()) {
     demoUpdateTenant(input)
     return
-  }
-
-  const { data: existingTenant, error: fetchError } = await supabase
-    .from('tenants')
-    .select('rent')
-    .eq('id', input.id)
-    .single()
-  if (fetchError) throw fetchError
-
-  let rentStatusPatch: { rent_status: RentStatus } | Record<string, never> = {}
-  if (existingTenant.rent !== input.rent) {
-    const { data: monthPayments, error: paymentsError } = await supabase
-      .from('payments')
-      .select('amount')
-      .eq('tenant_id', input.id)
-      .eq('for_month', currentMonthForMonth())
-    if (paymentsError) throw paymentsError
-    const total = (monthPayments ?? []).reduce((sum, p) => sum + p.amount, 0)
-    const status: RentStatus = total <= 0 ? 'pending' : total >= input.rent ? 'paid' : 'partial'
-    rentStatusPatch = { rent_status: status }
   }
 
   const { error } = await supabase
@@ -270,9 +263,9 @@ export async function updateTenant(input: UpdateTenantInput): Promise<void> {
       aadhaar_number: input.aadhaarNumber,
       occupation: input.occupation,
       photo_url: input.photoUrl,
+      joining_date: input.joiningDate,
       rent: input.rent,
       deposit: input.deposit,
-      ...rentStatusPatch,
     })
     .eq('id', input.id)
   if (error) throw error
@@ -378,14 +371,6 @@ export async function createPayment(input: CreatePaymentInput): Promise<void> {
   })
   if (paymentError) throw paymentError
 
-  if (input.forMonth === currentMonthForMonth()) {
-    const { error: updateError } = await supabase
-      .from('tenants')
-      .update({ rent_status: status })
-      .eq('id', input.tenantId)
-    if (updateError) throw updateError
-  }
-
   await pushSupabaseNotification(
     tenantRow.building_id,
     'payment',
@@ -446,34 +431,119 @@ export async function deleteDeposit(tenantId: string): Promise<void> {
   if (error) throw error
 }
 
-export async function deletePayment(paymentId: string, tenantId: string): Promise<void> {
+export type EditPaymentInput = DemoUpdatePaymentInput
+
+export async function updatePayment(input: EditPaymentInput): Promise<void> {
+  if (isDemoSession()) {
+    demoUpdatePayment(input)
+    return
+  }
+
+  const { data: paymentRow, error: fetchError } = await supabase
+    .from('payments')
+    .select('tenant_id, for_month')
+    .eq('id', input.id)
+    .single()
+  if (fetchError) throw fetchError
+
+  const { data: tenantRow, error: tenantError } = await supabase
+    .from('tenants')
+    .select('rent')
+    .eq('id', paymentRow.tenant_id)
+    .single()
+  if (tenantError) throw tenantError
+
+  const { error: updateError } = await supabase
+    .from('payments')
+    .update({ amount: input.amount, payment_date: input.paymentDate })
+    .eq('id', input.id)
+  if (updateError) throw updateError
+
+  const { data: monthPayments, error: monthError } = await supabase
+    .from('payments')
+    .select('amount')
+    .eq('tenant_id', paymentRow.tenant_id)
+    .eq('for_month', paymentRow.for_month)
+  if (monthError) throw monthError
+
+  const total = (monthPayments ?? []).reduce((sum, p) => sum + p.amount, 0)
+  const status: RentStatus = total >= tenantRow.rent ? 'paid' : 'partial'
+
+  const { error: statusError } = await supabase.from('payments').update({ status }).eq('id', input.id)
+  if (statusError) throw statusError
+
+}
+
+export async function deletePayment(paymentId: string, _tenantId: string): Promise<void> {
   if (isDemoSession()) {
     demoDeletePayment(paymentId)
     return
   }
 
-  const { data: deletedPayment, error: fetchDeletedError } = await supabase
-    .from('payments')
-    .select('for_month')
-    .eq('id', paymentId)
+  const { error } = await supabase.from('payments').delete().eq('id', paymentId)
+  if (error) throw error
+}
+
+export interface RentIncomeEntry {
+  id: string
+  tenantId: string
+  tenantName: string
+  amount: number
+  paymentDate: string
+  forMonth: string
+  createdAt: string
+}
+
+/** Every rent payment across all tenants — the "rent collection" side of the
+ * income feed, so it shows up alongside other income and expenses. */
+export async function getRentIncomeEntries(): Promise<RentIncomeEntry[]> {
+  if (isDemoSession()) {
+    const db = getDemoDb()
+    const nameById = new Map(db.tenants.map((t) => [t.id, t.name]))
+    return db.payments.map((p) => ({
+      id: p.id,
+      tenantId: p.tenantId,
+      tenantName: nameById.get(p.tenantId) ?? 'Tenant',
+      amount: p.amount,
+      paymentDate: p.paymentDate,
+      forMonth: p.forMonth,
+      createdAt: p.createdAt,
+    }))
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not authenticated')
+
+  const { data: buildingRow, error: buildingError } = await supabase
+    .from('building')
+    .select('id')
+    .eq('owner_id', user.id)
     .single()
-  if (fetchDeletedError) throw fetchDeletedError
+  if (buildingError) throw buildingError
 
-  const { error: deleteError } = await supabase.from('payments').delete().eq('id', paymentId)
-  if (deleteError) throw deleteError
+  const { data: tenantRows, error: tenantsError } = await supabase
+    .from('tenants')
+    .select('id, name')
+    .eq('building_id', buildingRow.id)
+  if (tenantsError) throw tenantsError
+  if (tenantRows.length === 0) return []
 
-  if (deletedPayment.for_month !== currentMonthForMonth()) return
+  const nameById = new Map(tenantRows.map((t) => [t.id, t.name]))
+  const { data, error } = await supabase
+    .from('payments')
+    .select('id, tenant_id, amount, payment_date, for_month, created_at')
+    .in('tenant_id', tenantRows.map((t) => t.id))
+  if (error) throw error
 
-  const [{ data: tenantRow, error: tenantError }, { data: remaining, error: fetchError }] = await Promise.all([
-    supabase.from('tenants').select('rent').eq('id', tenantId).single(),
-    supabase.from('payments').select('amount').eq('tenant_id', tenantId).eq('for_month', currentMonthForMonth()),
-  ])
-  if (tenantError) throw tenantError
-  if (fetchError) throw fetchError
-
-  const total = (remaining ?? []).reduce((sum, p) => sum + p.amount, 0)
-  const status: RentStatus = total <= 0 ? 'pending' : total >= tenantRow.rent ? 'paid' : 'partial'
-
-  const { error: updateError } = await supabase.from('tenants').update({ rent_status: status }).eq('id', tenantId)
-  if (updateError) throw updateError
+  return data.map((p) => ({
+    id: p.id,
+    tenantId: p.tenant_id,
+    tenantName: nameById.get(p.tenant_id) ?? 'Tenant',
+    amount: p.amount,
+    paymentDate: p.payment_date,
+    forMonth: p.for_month,
+    createdAt: p.created_at,
+  }))
 }

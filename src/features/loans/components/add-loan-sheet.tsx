@@ -21,12 +21,9 @@ const lenderTypeValues = lenderTypeOptions.map((o) => o.value) as [LenderType, .
 
 const loanSchema = z.object({
   lenderType: z.enum(lenderTypeValues),
-  lenderName: z.string(),
+  lenderName: z.string().trim().min(1, 'Enter what the loan is for').max(80, 'Too long'),
   amount: z.number().positive('Enter a valid amount').max(100_000_000, 'Amount seems too high'),
-  interestNote: z.string(),
   takenOn: z.string().min(1, 'Choose a date'),
-  takenTill: z.string(),
-  notes: z.string(),
 })
 
 type LoanFormValues = z.infer<typeof loanSchema>
@@ -35,10 +32,7 @@ const emptyValues = (): LoanFormValues => ({
   lenderType: 'bank',
   lenderName: '',
   amount: 0,
-  interestNote: '',
   takenOn: todayIso(),
-  takenTill: '',
-  notes: '',
 })
 
 interface AddLoanSheetProps {
@@ -69,10 +63,7 @@ export function AddLoanSheet({ open, onOpenChange, existingLoan }: AddLoanSheetP
         lenderType: existingLoan.lenderType,
         lenderName: existingLoan.lenderName ?? '',
         amount: existingLoan.amount,
-        interestNote: existingLoan.interestNote ?? '',
         takenOn: existingLoan.takenOn,
-        takenTill: existingLoan.takenTill ?? '',
-        notes: existingLoan.notes ?? '',
       })
     } else {
       reset(emptyValues())
@@ -83,12 +74,14 @@ export function AddLoanSheet({ open, onOpenChange, existingLoan }: AddLoanSheetP
     mutationFn: (values: LoanFormValues) => {
       const shared = {
         lenderType: values.lenderType,
-        lenderName: values.lenderName.trim() || null,
+        lenderName: values.lenderName.trim(),
         amount: values.amount,
-        interestNote: values.interestNote.trim() || null,
         takenOn: values.takenOn,
-        takenTill: values.takenTill || null,
-        notes: values.notes.trim() || null,
+        // Interest / end date / notes are no longer entered here — keep whatever
+        // an existing loan already has instead of wiping it on edit.
+        interestNote: existingLoan?.interestNote ?? null,
+        takenTill: existingLoan?.takenTill ?? null,
+        notes: existingLoan?.notes ?? null,
       }
       if (existingLoan) {
         return updateLoan({ id: existingLoan.id, ...shared })
@@ -139,8 +132,9 @@ export function AddLoanSheet({ open, onOpenChange, existingLoan }: AddLoanSheetP
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="lenderName">Loan for (optional)</Label>
-            <Input id="lenderName" placeholder="e.g. Marriage" {...register('lenderName')} />
+            <Label htmlFor="lenderName">Loan for</Label>
+            <Input id="lenderName" placeholder="e.g. Marriage" maxLength={80} {...register('lenderName')} />
+            {errors.lenderName ? <p className="text-xs text-danger">{errors.lenderName.message}</p> : null}
           </div>
 
           <div className="space-y-1.5">
@@ -150,33 +144,13 @@ export function AddLoanSheet({ open, onOpenChange, existingLoan }: AddLoanSheetP
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="interestNote">Interest (optional)</Label>
-            <Input id="interestNote" placeholder="e.g. 12% flat" {...register('interestNote')} />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Taken on</Label>
-              <Controller
-                name="takenOn"
-                control={control}
-                render={({ field }) => <DatePicker value={field.value} onChange={field.onChange} />}
-              />
-              {errors.takenOn ? <p className="text-xs text-danger">{errors.takenOn.message}</p> : null}
-            </div>
-            <div className="space-y-1.5">
-              <Label>End Date (optional)</Label>
-              <Controller
-                name="takenTill"
-                control={control}
-                render={({ field }) => <DatePicker value={field.value} onChange={field.onChange} disableFuture={false} />}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="notes">Notes (optional)</Label>
-            <Input id="notes" {...register('notes')} />
+            <Label>Taken on</Label>
+            <Controller
+              name="takenOn"
+              control={control}
+              render={({ field }) => <DatePicker value={field.value} onChange={field.onChange} />}
+            />
+            {errors.takenOn ? <p className="text-xs text-danger">{errors.takenOn.message}</p> : null}
           </div>
 
           <Button type="submit" className="w-full" disabled={mutation.isPending}>

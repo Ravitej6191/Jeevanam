@@ -22,6 +22,7 @@ export interface LoanRepayment {
   amount: number
   paymentDate: string
   notes: string | null
+  imageUrls: string[]
   createdAt: string
 }
 

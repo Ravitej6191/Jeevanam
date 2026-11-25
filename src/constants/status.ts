@@ -14,27 +14,6 @@ interface StatusToken {
   border: string
 }
 
-export const occupancyStatusTokens: Record<OccupancyStatus, StatusToken> = {
-  occupied: {
-    label: 'Occupied',
-    dot: 'bg-success',
-    badge: 'bg-success/15 text-success border-success/30',
-    border: 'border-l-success',
-  },
-  partial: {
-    label: 'Partially Occupied',
-    dot: 'bg-warning',
-    badge: 'bg-warning/15 text-warning border-warning/30',
-    border: 'border-l-warning',
-  },
-  vacant: {
-    label: 'Vacant',
-    dot: 'bg-neutral',
-    badge: 'bg-neutral/15 text-neutral-foreground border-neutral/30',
-    border: 'border-l-neutral',
-  },
-}
-
 export const rentStatusTokens: Record<RentBadgeStatus, StatusToken> = {
   paid: {
     label: 'Rent Paid',

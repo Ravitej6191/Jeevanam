@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ErrorState } from '@/components/common/error-state'
 import { SearchCombobox } from '@/components/common/search-combobox'
 import { getCitiesForState, indianStates } from '@/constants/india-geo'
 import { useBuildingData } from '@/features/building/hooks/use-building-data'
@@ -24,13 +25,14 @@ const PHONE_REGEX = /^[6-9]\d{9}$/
 const PINCODE_REGEX = /^\d{6}$/
 
 const profileSchema = z.object({
-  buildingName: z.string().min(2, 'Enter a name').max(80, 'Name is too long'),
+  buildingName: z.string().min(2, 'Enter your residency name').max(80, 'Name is too long'),
   address: z.string().min(3, 'Enter an address').max(200, 'Address is too long'),
   city: z.string().min(1, 'Choose a city'),
   state: z.string().min(1, 'Choose a state'),
   pincode: z.string().regex(PINCODE_REGEX, 'Enter a valid 6-digit pincode'),
   ownerName: z.string().min(2, 'Enter your name').max(80, 'Name is too long'),
   phone: z.string().regex(PHONE_REGEX, 'Enter a valid 10-digit mobile number'),
+  email: z.email('Enter a valid email address'),
 })
 
 type ProfileFormValues = z.infer<typeof profileSchema>
@@ -38,8 +40,12 @@ type ProfileFormValues = z.infer<typeof profileSchema>
 export function EditProfilePage() {
   const navigate = useNavigate()
   usePageTitle('Edit Profile', () => navigate(-1))
-  const { data } = useBuildingData()
+  const { data, isError, refetch } = useBuildingData()
   const { user } = useAuth()
+
+  if (isError) {
+    return <ErrorState title="Couldn't load your profile" description="Please try again." onRetry={() => refetch()} />
+  }
 
   if (!data) {
     return (
@@ -60,7 +66,8 @@ export function EditProfilePage() {
       state={data.building.state}
       pincode={data.building.pincode}
       ownerName={data.building.ownerName || user?.name || ''}
-      phone={data.building.contactPhone}
+      phone={data.building.contactPhone || user?.phone || ''}
+      email={data.building.contactEmail || user?.email || ''}
     />
   )
 }
@@ -74,6 +81,7 @@ interface EditProfileFormProps {
   pincode: string
   ownerName: string
   phone: string
+  email: string
 }
 
 function EditProfileForm({ propertyType, ...defaultValues }: EditProfileFormProps) {
@@ -116,7 +124,7 @@ function EditProfileForm({ propertyType, ...defaultValues }: EditProfileFormProp
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pb-8">
       <div className="space-y-1.5">
-        <Label htmlFor="buildingName">Building / PG / Residency name</Label>
+        <Label htmlFor="buildingName">Residency name</Label>
         <Input id="buildingName" maxLength={80} {...register('buildingName')} />
         {errors.buildingName ? <p className="text-xs text-danger">{errors.buildingName.message}</p> : null}
       </div>
@@ -203,6 +211,12 @@ function EditProfileForm({ propertyType, ...defaultValues }: EditProfileFormProp
           {...register('phone', { onChange: (e) => { e.target.value = digitsOnly(e.target.value, 10) } })}
         />
         {errors.phone ? <p className="text-xs text-danger">{errors.phone.message}</p> : null}
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="email">Email</Label>
+        <Input id="email" type="email" inputMode="email" autoComplete="email" {...register('email')} />
+        {errors.email ? <p className="text-xs text-danger">{errors.email.message}</p> : null}
       </div>
 
       <Button type="submit" className="w-full" disabled={isSaving}>

@@ -3,6 +3,7 @@ import { Bell, ChevronLeft } from 'lucide-react'
 import { usePageHeaderStore } from '@/store/page-header-store'
 import { useUnreadNotificationCount } from '@/features/notifications/hooks/use-notifications'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { useBuildingData } from '@/features/building/hooks/use-building-data'
 import { useAuth } from '@/providers/auth-provider'
 
 function initials(name: string) {
@@ -16,6 +17,10 @@ export function AppHeader() {
   const action = usePageHeaderStore((s) => s.action)
   const { data: unreadCount } = useUnreadNotificationCount()
   const { user } = useAuth()
+  const { data: building } = useBuildingData()
+  // The profile the owner saved wins over the sign-in identity (e.g. the demo
+  // placeholder), so the avatar initials follow their real name.
+  const displayName = building?.building.ownerName || user?.name || ''
 
   return (
     <header className="sticky top-0 z-30 flex items-center gap-1.5 border-b border-border/80 bg-card/85 px-4 pt-[env(safe-area-inset-top)] backdrop-blur-lg">
@@ -49,8 +54,8 @@ export function AppHeader() {
         className="press-scale -mr-1 flex size-9 shrink-0 items-center justify-center rounded-full"
       >
         <Avatar className="size-7 ring-2 ring-border/60 transition-shadow hover:ring-primary/40">
-          {user?.photoUrl ? <AvatarImage src={user.photoUrl} alt={user.name} referrerPolicy="no-referrer" /> : null}
-          <AvatarFallback className="text-[11px]">{user ? initials(user.name) : ''}</AvatarFallback>
+          {user?.photoUrl ? <AvatarImage src={user.photoUrl} alt={displayName} referrerPolicy="no-referrer" /> : null}
+          <AvatarFallback className="text-[11px]">{displayName ? initials(displayName) : ''}</AvatarFallback>
         </Avatar>
       </button>
     </header>

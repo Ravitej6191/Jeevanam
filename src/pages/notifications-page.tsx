@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/common/empty-state'
 import { ErrorState } from '@/components/common/error-state'
+import { ConfirmSheet } from '@/components/common/confirm-sheet'
 import { PullToRefresh } from '@/components/common/pull-to-refresh'
 import { useNotifications } from '@/features/notifications/hooks/use-notifications'
 import { clearAllNotifications, markAllNotificationsRead } from '@/features/notifications/services/notifications.service'
@@ -28,6 +29,7 @@ export function NotificationsPage() {
   usePageTitle('Notifications', onBack)
   const queryClient = useQueryClient()
   const { data: notifications, isLoading, isError, refetch } = useNotifications()
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false)
 
   useEffect(() => {
     if (notifications && notifications.some((n) => !n.read)) {
@@ -43,6 +45,7 @@ export function NotificationsPage() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['notifications'] })
       toast.success('Notifications cleared')
+      setClearConfirmOpen(false)
     },
     onError: () => toast.error('Could not clear notifications. Please try again.'),
   })
@@ -51,8 +54,7 @@ export function NotificationsPage() {
     notifications && notifications.length > 0 ? (
       <button
         type="button"
-        onClick={() => clearMutation.mutate()}
-        disabled={clearMutation.isPending}
+        onClick={() => setClearConfirmOpen(true)}
         aria-label="Clear all notifications"
         className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-60"
       >
@@ -103,6 +105,16 @@ export function NotificationsPage() {
             </div>
           </>
         )}
+
+        <ConfirmSheet
+          open={clearConfirmOpen}
+          onOpenChange={setClearConfirmOpen}
+          title="Clear all notifications?"
+          description="This can't be undone."
+          confirmLabel="Clear All"
+          isPending={clearMutation.isPending}
+          onConfirm={() => clearMutation.mutate()}
+        />
       </div>
     </PullToRefresh>
   )

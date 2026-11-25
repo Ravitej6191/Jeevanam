@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'motion/react'
@@ -10,13 +10,15 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { DatePicker } from '@/components/common/date-picker'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { EmptyState } from '@/components/common/empty-state'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useBuildingData } from '@/features/building/hooks/use-building-data'
 import { useTenant } from '@/features/tenants/hooks/use-tenant'
 import { createTenant, reassignTenant, updateTenant } from '@/features/tenants/services/tenants.service'
 import { uploadTenantFile } from '@/lib/storage'
-import { digitsOnly, formatAadhaar } from '@/utils/format'
+import { digitsOnly, formatAadhaar, todayIso } from '@/utils/format'
 import { usePageTitle } from '@/hooks/use-page-title'
 
 function Required() {
@@ -36,8 +38,9 @@ const tenantSchema = z.object({
   phone: z.string().regex(PHONE_REGEX, 'Enter a valid 10-digit mobile number'),
   aadhaarNumber: z.string().regex(/^\d{4}-\d{4}-\d{4}$/, 'Enter a valid 12-digit Aadhaar number'),
   occupation: z.string().max(60, 'Too long'),
+  joiningDate: z.string().min(1, 'Choose the agreed date'),
   rent: z.number().positive('Enter a valid amount').max(MAX_AMOUNT, 'Amount seems too high'),
-  deposit: z.number().min(0).max(MAX_AMOUNT, 'Amount seems too high'),
+  deposit: z.number().positive('Enter a valid amount').max(MAX_AMOUNT, 'Amount seems too high'),
 })
 
 type TenantFormValues = z.infer<typeof tenantSchema>
@@ -47,6 +50,7 @@ const emptyValues = (): TenantFormValues => ({
   phone: '',
   aadhaarNumber: '',
   occupation: '',
+  joiningDate: todayIso(),
   rent: 0,
   deposit: 0,
 })
@@ -74,6 +78,7 @@ export function AddTenantPage() {
 
   const {
     register,
+    control,
     handleSubmit,
     reset,
     formState: { errors },
@@ -93,6 +98,7 @@ export function AddTenantPage() {
         phone: existingTenant.phone,
         aadhaarNumber: existingTenant.aadhaarNumber ? formatAadhaar(existingTenant.aadhaarNumber) : '',
         occupation: existingTenant.occupation ?? '',
+        joiningDate: existingTenant.joiningDate,
         rent: existingTenant.rent,
         deposit: existingTenant.deposit,
       })
@@ -180,6 +186,7 @@ export function AddTenantPage() {
       aadhaarNumber: values.aadhaarNumber.replace(/-/g, '') || null,
       occupation: values.occupation || null,
       photoUrl,
+      joiningDate: values.joiningDate,
       rent: values.rent,
       deposit: values.deposit,
     }
@@ -224,87 +231,12 @@ export function AddTenantPage() {
     )
   }
 
-  if (view === 'created' && createdTenant) {
-    return (
-      <div className="flex flex-col items-center gap-4 pt-6 pb-8 text-center">
-        <motion.div
-          initial={{ scale: 0.5, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: 'spring', stiffness: 260, damping: 18 }}
-          className="flex size-16 items-center justify-center rounded-full bg-success/15 text-success"
-        >
-          <CheckCircle2 className="size-9" />
-        </motion.div>
-        <div className="space-y-1">
-          <p className="text-base font-semibold text-foreground">{createdTenant.name} added</p>
-          <p className="text-sm text-muted-foreground">Allocate a house now, or do it later from Building.</p>
-        </div>
-        <div className="flex w-full gap-2 pt-2">
-          <Button variant="outline" className="flex-1" onClick={() => navigate(`/tenants/${createdTenant.id}`, { replace: true })}>
-            Done
-          </Button>
-          <Button className="flex-1" onClick={() => setView('allocate')}>
-            Allocate House
-          </Button>
-        </div>
-      </div>
-    )
-  }
-
-  if (view === 'allocate' && createdTenant) {
-    return (
-      <div className="space-y-3">
-        {houseOptions.length === 0 ? (
-          <EmptyState icon={Home} title="No vacant houses" description="Add a house or free up a slot first." />
-        ) : (
-          <div className="space-y-2">
-            {houseOptions.map((option) => (
-              <button
-                key={option.houseId}
-                type="button"
-                disabled={allocateMutation.isPending}
-                onClick={() => allocateMutation.mutate({ tenantId: createdTenant.id, houseId: option.houseId })}
-                className="flex w-full items-center gap-3 rounded-lg border border-border/70 bg-card/60 px-3 py-2.5 text-left text-sm transition-colors hover:bg-accent disabled:opacity-60"
-              >
-                <Home className="size-4 shrink-0 text-muted-foreground" />
-                <span className="flex-1 text-foreground">{option.label}</span>
-                {allocateMutation.isPending ? <Loader2 className="size-4 shrink-0 animate-spin" /> : null}
-              </button>
-            ))}
-          </div>
-        )}
-        <Button variant="outline" className="w-full" onClick={() => navigate(`/tenants/${createdTenant.id}`, { replace: true })}>
-          Skip for Now
-        </Button>
-      </div>
-    )
-  }
-
-  if (view === 'allocated' && createdTenant) {
-    return (
-      <div className="flex flex-col items-center gap-4 pt-6 pb-8 text-center">
-        <motion.div
-          initial={{ scale: 0.5, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: 'spring', stiffness: 260, damping: 18 }}
-          className="flex size-16 items-center justify-center rounded-full bg-success/15 text-success"
-        >
-          <CheckCircle2 className="size-9" />
-        </motion.div>
-        <div className="space-y-1">
-          <p className="text-base font-semibold text-foreground">Tenant allocated</p>
-          <p className="text-sm text-muted-foreground">
-            {createdTenant.name} moved into {allocatedHouseLabel ?? 'the selected house'}.
-          </p>
-        </div>
-        <Button className="w-full" onClick={() => navigate(`/tenants/${createdTenant.id}`, { replace: true })}>
-          Done
-        </Button>
-      </div>
-    )
+  const openTenant = () => {
+    if (createdTenant) navigate(`/tenants/${createdTenant.id}`, { replace: true })
   }
 
   return (
+    <>
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pb-8">
       <div className="flex flex-col items-center gap-1.5">
         <div className="relative">
@@ -386,6 +318,19 @@ export function AddTenantPage() {
         <Input id="occupation" maxLength={60} {...register('occupation')} />
       </div>
 
+      <div className="space-y-1.5">
+        <Label>
+          Rent cycle
+          <Required />
+        </Label>
+        <Controller
+          name="joiningDate"
+          control={control}
+          render={({ field }) => <DatePicker value={field.value} onChange={field.onChange} />}
+        />
+        {errors.joiningDate ? <p className="text-xs text-danger">{errors.joiningDate.message}</p> : null}
+      </div>
+
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label htmlFor="rent">
@@ -410,5 +355,74 @@ export function AddTenantPage() {
         {isEditing ? 'Save Changes' : 'Add Tenant'}
       </Button>
     </form>
+
+    <Sheet open={view !== 'form' && createdTenant !== null} onOpenChange={(open) => !open && openTenant()}>
+      <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-xl">
+        {view === 'allocate' && createdTenant ? (
+          <>
+            <SheetHeader>
+              <SheetTitle>Allot a house</SheetTitle>
+              <SheetDescription>Choose a vacant house for {createdTenant.name}.</SheetDescription>
+            </SheetHeader>
+            <div className="space-y-3 px-4 pb-8">
+              {houseOptions.length === 0 ? (
+                <EmptyState icon={Home} title="No vacant houses" description="Add a house or free up a slot first." />
+              ) : (
+                <div className="space-y-2">
+                  {houseOptions.map((option) => (
+                    <button
+                      key={option.houseId}
+                      type="button"
+                      disabled={allocateMutation.isPending}
+                      onClick={() => allocateMutation.mutate({ tenantId: createdTenant.id, houseId: option.houseId })}
+                      className="flex w-full items-center gap-3 rounded-lg border border-border/70 bg-card/60 px-3 py-2.5 text-left text-sm transition-colors hover:bg-accent disabled:opacity-60"
+                    >
+                      <Home className="size-4 shrink-0 text-muted-foreground" />
+                      <span className="flex-1 text-foreground">{option.label}</span>
+                      {allocateMutation.isPending ? <Loader2 className="size-4 shrink-0 animate-spin" /> : null}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <Button variant="outline" className="w-full" onClick={openTenant}>
+                Skip for now
+              </Button>
+            </div>
+          </>
+        ) : createdTenant ? (
+          <div className="flex flex-col items-center gap-4 px-4 pt-4 pb-8 text-center">
+            <motion.div
+              initial={{ scale: 0.5, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', stiffness: 260, damping: 18 }}
+              className="flex size-16 items-center justify-center rounded-full bg-success/15 text-success"
+            >
+              <CheckCircle2 className="size-9" />
+            </motion.div>
+            <div className="space-y-1">
+              <SheetTitle className="text-base">
+                {view === 'allocated' ? 'Tenant allotted' : `${createdTenant.name} added`}
+              </SheetTitle>
+              <SheetDescription>
+                {view === 'allocated'
+                  ? `${createdTenant.name} moved into ${allocatedHouseLabel ?? 'the selected house'}.`
+                  : 'Allot a house now, or do it later from Residency.'}
+              </SheetDescription>
+            </div>
+            <div className="flex w-full gap-2 pt-2">
+              <Button variant="outline" className="flex-1" onClick={openTenant}>
+                View tenant
+              </Button>
+              {view === 'created' ? (
+                <Button className="flex-1" onClick={() => setView('allocate')}>
+                  Allot tenant
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+      </SheetContent>
+    </Sheet>
+    </>
   )
 }

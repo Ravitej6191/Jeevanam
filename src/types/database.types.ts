@@ -24,6 +24,20 @@ export type ExpenseCategory =
   | 'salary'
   | 'misc'
 export type LenderType = 'bank' | 'society' | 'dwakara' | 'hand_cash' | 'gold_loan' | 'other'
+export type IncomeCategory = 'salary' | 'business' | 'interest' | 'gift' | 'refund' | 'misc'
+export type ConstructionCategory =
+  | 'cement'
+  | 'steel'
+  | 'bricks'
+  | 'sand'
+  | 'labor'
+  | 'plumbing'
+  | 'electrical'
+  | 'painting'
+  | 'tiles_flooring'
+  | 'doors_windows'
+  | 'architect_design'
+  | 'misc'
 export type InventoryCategory =
   | 'kitchen'
   | 'furniture'
@@ -134,6 +148,7 @@ export type LoanRepaymentRow = {
   amount: number
   payment_date: string
   notes: string | null
+  receipt_urls: string[]
   created_at: string
 }
 
@@ -145,6 +160,27 @@ export type ExpenseRow = {
   expense_date: string
   description: string | null
   invoice_urls: string[]
+  created_at: string
+}
+
+export type ConstructionExpenseRow = {
+  id: string
+  building_id: string
+  category: ConstructionCategory
+  amount: number
+  expense_date: string
+  description: string | null
+  invoice_urls: string[]
+  created_at: string
+}
+
+export type IncomeRow = {
+  id: string
+  building_id: string
+  category: IncomeCategory
+  amount: number
+  income_date: string
+  description: string | null
   created_at: string
 }
 
@@ -232,6 +268,8 @@ export type Database = {
       loans: TableDef<LoanRow>
       loan_repayments: TableDef<LoanRepaymentRow>
       expenses: TableDef<ExpenseRow>
+      incomes: TableDef<IncomeRow>
+      construction_expenses: TableDef<ConstructionExpenseRow>
       inventory: TableDef<InventoryRow>
       documents: TableDef<DocumentRow>
       activities: TableDef<ActivityRow>
@@ -242,6 +280,10 @@ export type Database = {
     Views: { [_ in never]: never }
     Functions: {
       clear_app_data: {
+        Args: Record<PropertyKey, never>
+        Returns: void
+      }
+      delete_account: {
         Args: Record<PropertyKey, never>
         Returns: void
       }

@@ -1,7 +1,7 @@
 import { Pencil, Trash2 } from 'lucide-react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
-import { formatCurrency, formatDateTime } from '@/utils/format'
+import { formatCurrency, formatDate } from '@/utils/format'
 import { expenseCategoryOptions, type Expense } from '../types'
 
 interface ExpenseDetailSheetProps {
@@ -22,7 +22,7 @@ export function ExpenseDetailSheet({ expense, open, onOpenChange, onEdit, onDele
       <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-xl">
         <SheetHeader className="pb-2">
           <SheetTitle>{categoryLabel}</SheetTitle>
-          <p className="text-xs text-muted-foreground">{formatDateTime(expense.createdAt)}</p>
+          <p className="text-xs text-muted-foreground">{formatDate(expense.expenseDate)}</p>
         </SheetHeader>
 
         <div className="space-y-5 px-4 pb-8">

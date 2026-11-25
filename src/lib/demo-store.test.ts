@@ -105,8 +105,8 @@ function seedTenantInHouse(rent: number, deposit: number) {
     ownerName: 'Owner', phone: '',
   })
   const floor = addFloor({ name: 'Ground Floor', floorNumber: 0 })
-  const house1 = addHouse({ floorId: floor.id, houseNumber: 'G1', houseType: '1bhk', gasConnectionNumber: null, electricityBillNumber: null })
-  const house2 = addHouse({ floorId: floor.id, houseNumber: 'G2', houseType: '1bhk', gasConnectionNumber: null, electricityBillNumber: null })
+  const house1 = addHouse({ floorId: floor.id, houseNumber: 'G1', gasConnectionNumber: null, electricityBillNumber: null })
+  const house2 = addHouse({ floorId: floor.id, houseNumber: 'G2', gasConnectionNumber: null, electricityBillNumber: null })
   const tenant = addTenant({
     houseId: house1.id,
     name: 'Test Tenant', phone: '9876543210', aadhaarNumber: null,

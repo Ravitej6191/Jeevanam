@@ -1,6 +1,6 @@
 import { isDemoSession } from '@/config/env'
 import { supabase } from '@/lib/supabase'
-import { clearDemoDb, getDemoDb, seedFromOnboarding, updateBuildingProfile } from '@/lib/demo-store'
+import { getDemoDb, seedFromOnboarding, updateBuildingProfile } from '@/lib/demo-store'
 import type { OnboardingInput } from '../types'
 
 export async function getOnboardingStatus(): Promise<boolean> {
@@ -39,6 +39,7 @@ async function upsertProfileToSupabase(input: OnboardingInput): Promise<void> {
       state: input.state,
       pincode: input.pincode,
       contact_phone: input.phone,
+      contact_email: input.email,
     },
     { onConflict: 'owner_id' },
   )
@@ -55,7 +56,7 @@ async function upsertProfileToSupabase(input: OnboardingInput): Promise<void> {
   if (settingsError) throw settingsError
 }
 
-export async function completeOnboarding(input: OnboardingInput): Promise<void> {
+async function completeOnboarding(input: OnboardingInput): Promise<void> {
   if (isDemoSession()) {
     seedFromOnboarding(input)
     return
@@ -63,10 +64,12 @@ export async function completeOnboarding(input: OnboardingInput): Promise<void> 
   await upsertProfileToSupabase(input)
 }
 
-/** Lets a user past the onboarding gate without filling the form — building
- * name is the only column the DB actually requires, everything else can be
- * filled in later from Settings. */
-export async function skipOnboarding(): Promise<void> {
+/** Silently provisions the default building/settings row on first sign-in
+ * (building name is the only column the DB requires). Owner name, email and
+ * phone are seeded from the signed-in account — for Google that's the
+ * profile Google shares — and everything else can be filled in later from
+ * Settings. */
+export async function skipOnboarding(profile: { ownerName?: string; email?: string; phone?: string } = {}): Promise<void> {
   await completeOnboarding({
     propertyType: 'pg',
     buildingName: 'My Property',
@@ -74,8 +77,9 @@ export async function skipOnboarding(): Promise<void> {
     city: '',
     state: '',
     pincode: '',
-    ownerName: '',
-    phone: '',
+    ownerName: profile.ownerName ?? '',
+    phone: profile.phone ?? '',
+    email: profile.email ?? '',
   })
 }
 
@@ -91,6 +95,7 @@ export async function updateProfile(input: OnboardingInput): Promise<void> {
       state: input.state,
       pincode: input.pincode,
       contactPhone: input.phone,
+      contactEmail: input.email,
       ownerName: input.ownerName,
     })
     return
@@ -98,35 +103,14 @@ export async function updateProfile(input: OnboardingInput): Promise<void> {
   await upsertProfileToSupabase(input)
 }
 
-/** Wipes everything the owner has entered since onboarding — floors, houses,
- * tenants, payments, expenses, and every other operational record — but
- * keeps the building profile and `onboarding_completed` flag intact, so a
- * Google-authenticated owner isn't sent back through onboarding just to
- * clear their data. Used by "Clear App Data" in Settings (real backend only
- * — demo mode clears everything via logout instead, see auth-provider). */
-export async function clearAppData(): Promise<void> {
-  // Runs as a single Postgres transaction (see migration 0003) so a failure
-  // partway through can't leave the account half-wiped.
-  const { error } = await supabase.rpc('clear_app_data')
-  if (error) throw error
-}
-
-/** Permanently deletes the owner's building, settings, and (via cascade)
- * every record tied to them — used by "Delete Account" in Settings. */
+/** Permanently deletes the owner's account: all cloud data (building, settings
+ * and everything cascading from them, plus uploaded files) and the auth user
+ * itself, via the `delete_account` RPC (migration 0006). Demo mode has no
+ * cloud, so there's nothing to delete remotely — local data is wiped by the
+ * caller either way. */
 export async function clearAccountData(): Promise<void> {
-  if (isDemoSession()) {
-    clearDemoDb()
-    return
-  }
+  if (isDemoSession()) return
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error('Not authenticated')
-
-  const { error: buildingError } = await supabase.from('building').delete().eq('owner_id', user.id)
-  if (buildingError) throw buildingError
-
-  const { error: settingsError } = await supabase.from('settings').delete().eq('owner_id', user.id)
-  if (settingsError) throw settingsError
+  const { error } = await supabase.rpc('delete_account')
+  if (error) throw error
 }

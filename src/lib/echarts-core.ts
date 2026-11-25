@@ -1,8 +1,8 @@
 import * as echarts from 'echarts/core'
-import { BarChart } from 'echarts/charts'
-import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components'
+import { PieChart } from 'echarts/charts'
+import { TooltipComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 
-echarts.use([BarChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
+echarts.use([PieChart, TooltipComponent, CanvasRenderer])
 
 export { echarts }

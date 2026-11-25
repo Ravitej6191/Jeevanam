@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { IndianRupee, Pencil, Plus, Trash2 } from 'lucide-react'
+import { ChevronRight, IndianRupee, ImageIcon, Pencil, Plus, Trash2 } from 'lucide-react'
 import { ErrorState } from '@/components/common/error-state'
 import { PullToRefresh } from '@/components/common/pull-to-refresh'
 import { ConfirmSheet } from '@/components/common/confirm-sheet'
@@ -12,9 +12,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useLoans, useLoanRepayments } from '@/features/loans/hooks/use-loans'
 import { AddLoanSheet } from '@/features/loans/components/add-loan-sheet'
 import { RecordRepaymentSheet } from '@/features/loans/components/record-repayment-sheet'
+import { RepaymentDetailSheet } from '@/features/loans/components/repayment-detail-sheet'
 import { deleteLoan, deleteLoanRepayment } from '@/features/loans/services/loans.service'
-import { lenderTypeLabel } from '@/features/loans/types'
-import { formatCurrency, formatDate, formatDateTime } from '@/utils/format'
+import { lenderTypeLabel, type LoanRepayment } from '@/features/loans/types'
+import { formatCurrency, formatDate } from '@/utils/format'
 import { usePageTitle } from '@/hooks/use-page-title'
 import { cn } from '@/lib/utils'
 
@@ -32,6 +33,8 @@ export function LoanDetailPage() {
   const [repaymentOpen, setRepaymentOpen] = useState(false)
   const [deleteLoanOpen, setDeleteLoanOpen] = useState(false)
   const [deleteRepaymentId, setDeleteRepaymentId] = useState<string | null>(null)
+  const [viewingRepayment, setViewingRepayment] = useState<LoanRepayment | null>(null)
+  const [editingRepayment, setEditingRepayment] = useState<LoanRepayment | null>(null)
 
   const invalidateAll = () =>
     Promise.all([
@@ -75,11 +78,10 @@ export function LoanDetailPage() {
   const percentPaid = loan.amount > 0 ? Math.min(100, Math.round((loan.paidTillNow / loan.amount) * 100)) : 0
   const isClosed = loan.stillToPay <= 0
 
+  // Taken-on lives in the header now; interest / end date only appear for
+  // older loans that still carry them.
   const facts = [
-    { label: 'Loan Type', value: lenderTypeLabel(loan.lenderType) },
-    ...(loan.lenderName ? [{ label: 'Loan for', value: loan.lenderName }] : []),
     ...(loan.interestNote ? [{ label: 'Interest', value: loan.interestNote }] : []),
-    { label: 'Taken on', value: formatDate(loan.takenOn) },
     ...(loan.takenTill ? [{ label: 'End Date', value: formatDate(loan.takenTill) }] : []),
   ]
 
@@ -89,20 +91,38 @@ export function LoanDetailPage() {
         <div className="space-y-5 pb-8">
           <Card className="gap-3 border-border p-4">
             <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="text-base font-semibold text-foreground">
-                  {loan.lenderName || lenderTypeLabel(loan.lenderType)}
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="truncate text-base font-semibold text-foreground">
+                    {loan.lenderName || lenderTypeLabel(loan.lenderType)}
+                  </p>
+                  <span
+                    className={cn(
+                      'shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium',
+                      isClosed ? 'border-success/30 bg-success/15 text-success' : 'border-warning/30 bg-warning/15 text-warning',
+                    )}
+                  >
+                    {isClosed ? 'Closed' : 'Active'}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {lenderTypeLabel(loan.lenderType)} · Taken {formatDate(loan.takenOn)}
                 </p>
-                <p className="text-xs text-muted-foreground">{lenderTypeLabel(loan.lenderType)}</p>
               </div>
-              <span
-                className={cn(
-                  'shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium',
-                  isClosed ? 'border-success/30 bg-success/15 text-success' : 'border-warning/30 bg-warning/15 text-warning',
-                )}
-              >
-                {isClosed ? 'Closed' : 'Active'}
-              </span>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <Button variant="outline" size="icon-sm" aria-label="Edit loan" onClick={() => setEditOpen(true)}>
+                  <Pencil className="size-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  aria-label="Delete loan"
+                  className="text-danger hover:text-danger"
+                  onClick={() => setDeleteLoanOpen(true)}
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              </div>
             </div>
 
             <div className="grid grid-cols-3 divide-x divide-border rounded-lg bg-muted/50 text-sm">
@@ -127,30 +147,16 @@ export function LoanDetailPage() {
               <p className="text-[11px] text-muted-foreground">{percentPaid}% paid</p>
             </div>
 
-            <div className="space-y-2 text-sm">
-              {facts.map((fact) => (
-                <div key={fact.label} className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">{fact.label}</span>
-                  <span className="font-medium text-foreground">{fact.value}</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" className="flex-1" onClick={() => setEditOpen(true)}>
-                <Pencil className="size-4" />
-                Edit
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1 text-danger hover:text-danger"
-                onClick={() => setDeleteLoanOpen(true)}
-              >
-                <Trash2 className="size-4" />
-                Delete
-              </Button>
-            </div>
+            {facts.length > 0 ? (
+              <div className="space-y-2 text-sm">
+                {facts.map((fact) => (
+                  <div key={fact.label} className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">{fact.label}</span>
+                    <span className="font-medium text-foreground">{fact.value}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </Card>
 
           <div>
@@ -166,29 +172,31 @@ export function LoanDetailPage() {
             ) : (
               <div className="space-y-2">
                 {repayments.map((r) => (
-                  <div
+                  <button
                     key={r.id}
-                    className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2.5"
+                    type="button"
+                    onClick={() => setViewingRepayment(r)}
+                    className="press-scale flex w-full items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2.5 text-left transition-colors hover:bg-accent"
                   >
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex min-w-0 items-center gap-2.5">
                       <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-success/15 text-success">
                         <IndianRupee className="size-4" />
                       </span>
-                      <div>
+                      <div className="min-w-0">
                         <p className="text-sm font-medium text-foreground">{formatCurrency(r.amount)}</p>
-                        <p className="text-xs text-muted-foreground">{formatDateTime(r.createdAt)}</p>
+                        <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
+                          {formatDate(r.paymentDate)}
+                          {r.imageUrls.length > 0 ? (
+                            <span className="inline-flex items-center gap-0.5">
+                              <ImageIcon className="size-3" />
+                              {r.imageUrls.length}
+                            </span>
+                          ) : null}
+                        </p>
                       </div>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="icon-sm"
-                      aria-label="Delete repayment"
-                      className="text-danger hover:text-danger"
-                      onClick={() => setDeleteRepaymentId(r.id)}
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
-                  </div>
+                    <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                  </button>
                 ))}
               </div>
             )}
@@ -198,6 +206,25 @@ export function LoanDetailPage() {
 
       <AddLoanSheet open={editOpen} onOpenChange={setEditOpen} existingLoan={loan} />
       <RecordRepaymentSheet open={repaymentOpen} onOpenChange={setRepaymentOpen} loan={loan} />
+      <RecordRepaymentSheet
+        open={editingRepayment !== null}
+        onOpenChange={(open) => !open && setEditingRepayment(null)}
+        loan={loan}
+        existingRepayment={editingRepayment}
+      />
+      <RepaymentDetailSheet
+        repayment={viewingRepayment}
+        open={viewingRepayment !== null}
+        onOpenChange={(open) => !open && setViewingRepayment(null)}
+        onEdit={() => {
+          setEditingRepayment(viewingRepayment)
+          setViewingRepayment(null)
+        }}
+        onDelete={() => {
+          setDeleteRepaymentId(viewingRepayment?.id ?? null)
+          setViewingRepayment(null)
+        }}
+      />
 
       <ConfirmSheet
         open={deleteLoanOpen}

@@ -8,10 +8,6 @@ export function formatCurrency(amount: number): string {
   return currencyFormatter.format(amount)
 }
 
-export function formatCompactNumber(value: number): string {
-  return new Intl.NumberFormat('en-IN', { notation: 'compact' }).format(value)
-}
-
 /** Strips non-digit characters and truncates to maxLength — used by phone/
  * pincode/OTP-style inputs that must stay numeric as the user types. */
 export function digitsOnly(value: string, maxLength: number): string {

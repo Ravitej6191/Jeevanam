@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Building2, Home, Pencil, Plus, Trash2, UserPlus, Users } from 'lucide-react'
+import { Building2, Pencil, Plus, Trash2, UserPlus, Users } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { ErrorState } from '@/components/common/error-state'
 import { EmptyState } from '@/components/common/empty-state'
@@ -9,6 +9,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useBuildingData } from '@/features/building/hooks/use-building-data'
+import { useTenants } from '@/features/tenants/hooks/use-tenants'
 import { HouseGrid } from '@/features/building/components/house-grid'
 import { HouseDetailSheet } from '@/features/building/components/house-detail-sheet'
 import { AddFloorSheet } from '@/features/building/components/add-floor-sheet'
@@ -20,10 +21,11 @@ import { useUiStore } from '@/store/ui-store'
 import { usePageTitle } from '@/hooks/use-page-title'
 import type { Floor, House } from '@/features/building/types'
 
-export function BuildingPage() {
+export function ResidencyPage() {
   const navigate = useNavigate()
-  usePageTitle('Building', () => navigate(-1))
+  usePageTitle('Residency')
   const { data, isLoading, isError, refetch } = useBuildingData()
+  const { data: tenants } = useTenants()
   const selectedHouseId = useUiStore((s) => s.selectedHouseId)
   const setSelectedHouseId = useUiStore((s) => s.setSelectedHouseId)
   const [allotTarget, setAllotTarget] = useState<House | null>(null)
@@ -58,16 +60,7 @@ export function BuildingPage() {
     [data],
   )
 
-  const kpis = useMemo(() => {
-    if (!data) return { occupied: 0 }
-    let occupied = 0
-    for (const floor of data.floors) {
-      for (const house of floor.houses) {
-        if (house.occupancyStatus === 'occupied') occupied += 1
-      }
-    }
-    return { occupied }
-  }, [data])
+  const activeTenantCount = useMemo(() => (tenants ?? []).filter((t) => t.status === 'active').length, [tenants])
 
   const houseSheetFloorId = editHouse?.floorId ?? addHouseFloor?.id ?? null
 
@@ -75,9 +68,9 @@ export function BuildingPage() {
     <PullToRefresh onRefresh={refetch}>
       <div className="space-y-4">
         {isError ? (
-          <ErrorState title="Couldn't load building" description="Please try again." onRetry={() => refetch()} />
+          <ErrorState title="Couldn't load your residency" description="Please try again." onRetry={() => refetch()} />
         ) : isLoading || !data ? (
-          <BuildingSkeleton />
+          <ResidencySkeleton />
         ) : data.floors.length === 0 ? (
           <EmptyState
             icon={Building2}
@@ -87,11 +80,10 @@ export function BuildingPage() {
           />
         ) : (
           <>
-            <div className="grid grid-cols-4 gap-2">
-              <KpiTile label="Occupied" value={kpis.occupied} icon={Home} tone="text-success" />
+            <div className="grid grid-cols-3 gap-2">
               <KpiTile
                 label="Tenants"
-                value={kpis.occupied}
+                value={activeTenantCount}
                 icon={Users}
                 tone="text-info"
                 onClick={() => navigate('/tenants')}
@@ -274,11 +266,11 @@ function KpiTile({
   )
 }
 
-function BuildingSkeleton() {
+function ResidencySkeleton() {
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-4 gap-2">
-        {Array.from({ length: 4 }).map((_, i) => (
+      <div className="grid grid-cols-3 gap-2">
+        {Array.from({ length: 3 }).map((_, i) => (
           <Skeleton key={i} className="h-16 rounded-lg" />
         ))}
       </div>

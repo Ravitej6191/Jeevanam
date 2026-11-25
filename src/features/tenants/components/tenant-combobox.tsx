@@ -10,9 +10,10 @@ interface TenantComboboxProps {
   tenants: Tenant[]
   value: string
   onChange: (tenantId: string) => void
+  emptyText?: string
 }
 
-export function TenantCombobox({ tenants, value, onChange }: TenantComboboxProps) {
+export function TenantCombobox({ tenants, value, onChange, emptyText = 'No tenant found.' }: TenantComboboxProps) {
   const [open, setOpen] = useState(false)
   const selected = tenants.find((t) => t.id === value)
 
@@ -39,7 +40,7 @@ export function TenantCombobox({ tenants, value, onChange }: TenantComboboxProps
         <Command>
           <CommandInput placeholder="Search tenants..." />
           <CommandList>
-            <CommandEmpty>No tenant found.</CommandEmpty>
+            <CommandEmpty>{emptyText}</CommandEmpty>
             <CommandGroup>
               {tenants.map((tenant) => (
                 <CommandItem

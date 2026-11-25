@@ -1,7 +1,6 @@
 import { AlertCircle, CheckCircle2 } from 'lucide-react'
 import { motion } from 'motion/react'
 import { cn } from '@/lib/utils'
-import { houseTypeLabel } from '../types'
 import type { House } from '../types'
 
 export function HouseCard({ house, onSelect }: { house: House; onSelect: () => void }) {
@@ -22,10 +21,7 @@ export function HouseCard({ house, onSelect }: { house: House; onSelect: () => v
       />
 
       <div className="flex items-start justify-between gap-2 pt-0.5">
-        <div>
-          <p className="text-base font-semibold text-foreground">{house.houseNumber}</p>
-          <p className="text-xs text-muted-foreground">{houseTypeLabel(house.houseType)}</p>
-        </div>
+        <p className="text-base font-semibold text-foreground">{house.houseNumber}</p>
 
         {house.tenant ? (
           <span

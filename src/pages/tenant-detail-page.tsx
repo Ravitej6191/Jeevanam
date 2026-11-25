@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Briefcase, ChevronRight, IdCard, IndianRupee, Pencil, Phone, Repeat, ShieldCheck, UserX } from 'lucide-react'
+import { Briefcase, CalendarDays, ChevronRight, IdCard, IndianRupee, Pencil, Phone, ShieldCheck, UserX } from 'lucide-react'
 import { ErrorState } from '@/components/common/error-state'
 import { StatusChip } from '@/components/common/status-chip'
 import { PullToRefresh } from '@/components/common/pull-to-refresh'
@@ -13,10 +13,9 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmSheet } from '@/components/common/confirm-sheet'
 import { useTenant, usePaymentHistory } from '@/features/tenants/hooks/use-tenant'
-import { ReassignTenantSheet } from '@/features/tenants/components/reassign-tenant-sheet'
 import { VacateTenantDialog } from '@/features/tenants/components/vacate-tenant-dialog'
 import { PaymentDetailSheet, type HistoryEntry } from '@/features/tenants/components/payment-detail-sheet'
-import { deleteDeposit, deletePayment } from '@/features/tenants/services/tenants.service'
+import { deleteDeposit, deletePayment, recordDeposit, updatePayment } from '@/features/tenants/services/tenants.service'
 import { rentStatusTokens } from '@/constants/status'
 import { formatAadhaar, formatCurrency, formatDate, formatDateTime } from '@/utils/format'
 import { usePageTitle } from '@/hooks/use-page-title'
@@ -31,7 +30,6 @@ export function TenantDetailPage() {
   const queryClient = useQueryClient()
   const { data: tenant, isLoading, isError, refetch } = useTenant(id)
   const { data: payments } = usePaymentHistory(id)
-  const [reassignOpen, setReassignOpen] = useState(false)
   const [vacateOpen, setVacateOpen] = useState(false)
   const [deletePaymentId, setDeletePaymentId] = useState<string | null>(null)
   const [deleteDepositOpen, setDeleteDepositOpen] = useState(false)
@@ -65,6 +63,32 @@ export function TenantDetailPage() {
       setSelectedEntry(null)
     },
     onError: () => toast.error('Could not delete the deposit. Please try again.'),
+  })
+
+  const editPaymentMutation = useMutation({
+    mutationFn: updatePayment,
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['tenants'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+      ])
+      toast.success('Payment updated')
+      setSelectedEntry(null)
+    },
+    onError: () => toast.error('Could not update the payment. Please try again.'),
+  })
+
+  const editDepositMutation = useMutation({
+    mutationFn: recordDeposit,
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['tenants'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+      ])
+      toast.success('Deposit updated')
+      setSelectedEntry(null)
+    },
+    onError: () => toast.error('Could not update the deposit. Please try again.'),
   })
 
   if (isLoading) {
@@ -156,7 +180,9 @@ export function TenantDetailPage() {
                 <ShieldCheck className="size-3.5" />
                 Deposit
               </div>
-              <p className="font-numeric text-lg font-semibold text-foreground">{formatCurrency(tenant.deposit)}</p>
+              <p className="font-numeric text-lg font-semibold text-foreground">
+                {formatCurrency(tenant.depositRecord?.amount ?? tenant.deposit)}
+              </p>
               <StatusChip
                 token={
                   tenant.depositRecord
@@ -171,7 +197,9 @@ export function TenantDetailPage() {
 
           <div className="space-y-1.5 text-sm text-muted-foreground">
             <div className="flex items-center gap-2">
-              <Phone className="size-3.5 shrink-0" /> {tenant.phone}
+              <Phone className="size-3.5 shrink-0" />
+              <span className="text-xs text-muted-foreground/70">Phone</span>
+              <span className="text-foreground">{tenant.phone}</span>
             </div>
             {tenant.aadhaarNumber ? (
               <div className="flex items-center gap-2">
@@ -183,14 +211,19 @@ export function TenantDetailPage() {
             {tenant.occupation ? (
               <div className="flex items-center gap-2">
                 <Briefcase className="size-3.5 shrink-0" />
-                {tenant.occupation}
+                <span className="text-xs text-muted-foreground/70">Occupation</span>
+                <span className="text-foreground">{tenant.occupation}</span>
               </div>
             ) : null}
-            <p className="pt-0.5 text-xs">
-              {isActive
-                ? `Joined ${formatDate(tenant.joiningDate)}`
-                : `${formatDate(tenant.joiningDate)} — ${tenant.vacatingDate ? formatDate(tenant.vacatingDate) : ''}`}
-            </p>
+            <div className="flex items-center gap-2">
+              <CalendarDays className="size-3.5 shrink-0" />
+              <span className="text-xs text-muted-foreground/70">{isActive ? 'Joined' : 'Stayed'}</span>
+              <span className="text-foreground">
+                {isActive
+                  ? formatDate(tenant.joiningDate)
+                  : `${formatDate(tenant.joiningDate)} — ${tenant.vacatingDate ? formatDate(tenant.vacatingDate) : ''}`}
+              </span>
+            </div>
           </div>
         </Card>
 
@@ -238,9 +271,20 @@ export function TenantDetailPage() {
             setDeletePaymentId(paymentId)
           }}
           onDeleteDeposit={() => setDeleteDepositOpen(true)}
+          onEditPayment={(paymentId, values) =>
+            editPaymentMutation.mutate({ id: paymentId, amount: values.amount, paymentDate: values.paymentDate })
+          }
+          onEditDeposit={(values) =>
+            editDepositMutation.mutate({
+              tenantId: tenant.id,
+              amount: values.amount,
+              paidDate: values.paymentDate,
+              screenshotUrl: tenant.depositRecord?.screenshotUrl ?? null,
+            })
+          }
+          isEditPending={editPaymentMutation.isPending || editDepositMutation.isPending}
         />
 
-        <ReassignTenantSheet open={reassignOpen} onOpenChange={setReassignOpen} tenant={tenant} />
         <VacateTenantDialog open={vacateOpen} onOpenChange={setVacateOpen} tenant={tenant} onVacated={() => navigate(-1)} />
 
         <ConfirmSheet
@@ -277,15 +321,16 @@ export function TenantDetailPage() {
         >
           <UserX className="size-4" />
         </Button>
-        <Button variant="outline" size="icon" onClick={() => setReassignOpen(true)} aria-label="Reassign house">
-          <Repeat className="size-4" />
-        </Button>
         <Button variant="outline" size="icon" onClick={() => navigate(`/tenants/${tenant.id}/edit`)} aria-label="Edit tenant">
           <Pencil className="size-4" />
         </Button>
-        <Button className="flex-1" onClick={() => navigate(`/tenants/record-payment?tenantId=${tenant.id}`)}>
-          Record Payment
-        </Button>
+        {tenant.houseId ? (
+          <Button className="flex-1" onClick={() => navigate(`/tenants/record-payment?tenantId=${tenant.id}`)}>
+            Record Payment
+          </Button>
+        ) : (
+          <p className="flex-1 text-right text-xs text-muted-foreground">Allot a house to record rent</p>
+        )}
       </div>
     ) : null}
     </>

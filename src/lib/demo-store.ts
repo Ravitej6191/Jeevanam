@@ -1,6 +1,6 @@
 import type {
   ExpenseCategory,
-  HouseType,
+  IncomeCategory,
   LenderType,
   PaymentMode,
   PropertyType,
@@ -8,7 +8,8 @@ import type {
   TenantStatus,
 } from '@/types/database.types'
 import type { Tenant } from '@/types/domain'
-import { formatCurrency, monthKey as localMonthKey, todayIso } from '@/utils/format'
+import { formatCurrency, todayIso } from '@/utils/format'
+import { currentCycle } from '@/utils/rent-cycle'
 
 /**
  * Local, mutable "demo database" — a single localStorage-persisted JSON
@@ -56,7 +57,6 @@ export interface DemoHouse {
   id: string
   floorId: string
   houseNumber: string
-  houseType: HouseType
   gasConnectionNumber: string | null
   electricityBillNumber: string | null
 }
@@ -118,6 +118,15 @@ export interface DemoExpense {
   createdAt: string
 }
 
+export interface DemoIncome {
+  id: string
+  category: IncomeCategory
+  amount: number
+  incomeDate: string
+  description: string | null
+  createdAt: string
+}
+
 export interface DemoLoan {
   id: string
   lenderType: LenderType
@@ -136,6 +145,8 @@ export interface DemoLoanRepayment {
   amount: number
   paymentDate: string
   notes: string | null
+  /** Optional receipt photos. Absent on repayments saved before photos existed. */
+  imageUrls?: string[]
   createdAt: string
 }
 
@@ -176,6 +187,7 @@ export interface DemoDb {
   loans: DemoLoan[]
   loanRepayments: DemoLoanRepayment[]
   expenses: DemoExpense[]
+  incomes: DemoIncome[]
   broadcasts: DemoBroadcast[]
   notifications: DemoNotification[]
 }
@@ -201,6 +213,7 @@ function emptyDb(): DemoDb {
     loans: [],
     loanRepayments: [],
     expenses: [],
+    incomes: [],
     broadcasts: [],
     notifications: [],
   }
@@ -212,16 +225,9 @@ export function clearDemoDb(): void {
   localStorage.removeItem(STORAGE_KEY)
 }
 
-/** All active tenants become rent-pending again at the start of a new
- * calendar month, until a fresh payment is recorded for that month. */
-function applyMonthlyRentReset(db: DemoDb): DemoDb {
-  const month = localMonthKey(new Date())
-  if (!db.settings.onboardingCompleted || db.settings.lastRentResetMonth === month) return db
-  return {
-    ...db,
-    settings: { ...db.settings, lastRentResetMonth: month },
-    tenants: db.tenants.map((t) => (t.status === 'active' ? { ...t, rentStatus: 'pending' } : t)),
-  }
+/** The `for_month` key of the rent cycle a tenant is currently in. */
+function cycleKeyFor(tenant: { joiningDate: string } | undefined): string {
+  return currentCycle(tenant?.joiningDate ?? todayIso()).forMonth
 }
 
 export function getDemoDb(): DemoDb {
@@ -230,10 +236,7 @@ export function getDemoDb(): DemoDb {
   if (!raw) return emptyDb()
   try {
     const parsed = JSON.parse(raw) as DemoDb
-    const merged = { ...emptyDb(), ...parsed }
-    const withReset = applyMonthlyRentReset(merged)
-    if (withReset !== merged) localStorage.setItem(STORAGE_KEY, JSON.stringify(withReset))
-    return withReset
+    return { ...emptyDb(), ...parsed }
   } catch {
     return emptyDb()
   }
@@ -257,6 +260,7 @@ export interface OnboardingSeedInput {
   pincode: string
   ownerName: string
   phone: string
+  email?: string
 }
 
 export function seedFromOnboarding(input: OnboardingSeedInput): DemoDb {
@@ -271,7 +275,7 @@ export function seedFromOnboarding(input: OnboardingSeedInput): DemoDb {
       state: input.state,
       pincode: input.pincode,
       contactPhone: input.phone,
-      contactEmail: '',
+      contactEmail: input.email ?? '',
     },
     floors: [],
     houses: [],
@@ -280,6 +284,7 @@ export function seedFromOnboarding(input: OnboardingSeedInput): DemoDb {
     loans: [],
     loanRepayments: [],
     expenses: [],
+    incomes: [],
     broadcasts: [],
     notifications: [],
   }))
@@ -326,7 +331,6 @@ export function deleteFloor(floorId: string): void {
 export interface AddHouseInput {
   floorId: string
   houseNumber: string
-  houseType: HouseType
   gasConnectionNumber: string | null
   electricityBillNumber: string | null
 }
@@ -336,7 +340,6 @@ export function addHouse(input: AddHouseInput): DemoHouse {
     id: crypto.randomUUID(),
     floorId: input.floorId,
     houseNumber: input.houseNumber,
-    houseType: input.houseType,
     gasConnectionNumber: input.gasConnectionNumber,
     electricityBillNumber: input.electricityBillNumber,
   }
@@ -347,7 +350,6 @@ export function addHouse(input: AddHouseInput): DemoHouse {
 export interface UpdateHouseInput {
   id: string
   houseNumber: string
-  houseType: HouseType
   gasConnectionNumber: string | null
   electricityBillNumber: string | null
 }
@@ -360,7 +362,6 @@ export function updateHouse(input: UpdateHouseInput): void {
         ? {
             ...h,
             houseNumber: input.houseNumber,
-            houseType: input.houseType,
             gasConnectionNumber: input.gasConnectionNumber,
             electricityBillNumber: input.electricityBillNumber,
           }
@@ -395,8 +396,7 @@ export function updateBuildingProfile(patch: Partial<DemoBuilding> & { ownerName
 export function resolveTenant(db: DemoDb, demoTenant: DemoTenant): Tenant {
   const house = demoTenant.houseId ? db.houses.find((h) => h.id === demoTenant.houseId) : undefined
   const floor = house ? db.floors.find((f) => f.id === house.floorId) : undefined
-  const currentMonthForMonth = `${localMonthKey(new Date())}-01`
-  const rentStatus = computeMonthlyRentStatus(db.payments, demoTenant.id, currentMonthForMonth, demoTenant.rent)
+  const rentStatus = computeMonthlyRentStatus(db.payments, demoTenant.id, cycleKeyFor(demoTenant), demoTenant.rent)
 
   return {
     id: demoTenant.id,
@@ -452,6 +452,8 @@ export interface AddTenantInput {
   aadhaarNumber: string | null
   occupation: string | null
   photoUrl: string | null
+  /** The agreed date rent cycles are anchored to. Defaults to today. */
+  joiningDate?: string
   rent: number
   deposit: number
 }
@@ -472,7 +474,7 @@ export function addTenant(input: AddTenantInput): DemoTenant {
     address: null,
     occupation: input.occupation,
     photoUrl: input.photoUrl,
-    joiningDate: todayIso(),
+    joiningDate: input.joiningDate ?? todayIso(),
     vacatingDate: null,
     advance: 0,
     deposit: input.deposit,
@@ -497,18 +499,17 @@ export interface UpdateTenantInput {
   aadhaarNumber: string | null
   occupation: string | null
   photoUrl: string | null
+  joiningDate: string
   rent: number
   deposit: number
 }
 
 export function updateTenant(input: UpdateTenantInput): void {
-  const currentMonthForMonth = `${localMonthKey(new Date())}-01`
   updateDemoDb((db) => {
     const existing = db.tenants.find((t) => t.id === input.id)
-    const rentChanged = existing && existing.rent !== input.rent
-    const newStatus = rentChanged
-      ? computeMonthlyRentStatus(db.payments, input.id, currentMonthForMonth, input.rent)
-      : existing?.rentStatus
+    const newStatus = existing
+      ? computeMonthlyRentStatus(db.payments, input.id, cycleKeyFor({ joiningDate: input.joiningDate }), input.rent)
+      : undefined
 
     return {
       ...db,
@@ -521,6 +522,7 @@ export function updateTenant(input: UpdateTenantInput): void {
               aadhaarNumber: input.aadhaarNumber,
               occupation: input.occupation,
               photoUrl: input.photoUrl,
+              joiningDate: input.joiningDate,
               rent: input.rent,
               deposit: input.deposit,
               rentStatus: newStatus ?? t.rentStatus,
@@ -599,13 +601,11 @@ export function recordPayment(input: RecordPaymentInput): DemoPayment {
     createdAt: new Date().toISOString(),
   }
 
-  const currentMonthForMonth = `${localMonthKey(new Date())}-01`
-
   updateDemoDb((current) => ({
     ...current,
     payments: [...current.payments, payment],
     tenants: current.tenants.map((t) =>
-      t.id === input.tenantId && input.forMonth === currentMonthForMonth ? { ...t, rentStatus: status } : t,
+      t.id === input.tenantId && input.forMonth === cycleKeyFor(t) ? { ...t, rentStatus: status } : t,
     ),
   }))
 
@@ -618,17 +618,55 @@ export function recordPayment(input: RecordPaymentInput): DemoPayment {
   return payment
 }
 
+export interface UpdatePaymentInput {
+  id: string
+  amount: number
+  paymentDate: string
+}
+
+/** Corrects an already-recorded rent payment's amount/date — e.g. fixing a
+ * manual entry mistake — without going through delete + re-add. Recomputes
+ * that payment's own status against the month's new total, and the
+ * tenant's live `rentStatus` when the edited payment falls in the current
+ * month (mirrors the recompute `deletePayment` already does). */
+export function updatePayment(input: UpdatePaymentInput): void {
+  updateDemoDb((db) => {
+    const payment = db.payments.find((p) => p.id === input.id)
+    if (!payment) return db
+    const tenant = db.tenants.find((t) => t.id === payment.tenantId)
+
+    const amendedPayments = db.payments.map((p) =>
+      p.id === input.id ? { ...p, amount: input.amount, paymentDate: input.paymentDate } : p,
+    )
+    const totalForMonth = amendedPayments
+      .filter((p) => p.tenantId === payment.tenantId && p.forMonth === payment.forMonth)
+      .reduce((sum, p) => sum + p.amount, 0)
+    const entryStatus: RentStatus = tenant && totalForMonth >= tenant.rent ? 'paid' : 'partial'
+    const payments = amendedPayments.map((p) => (p.id === input.id ? { ...p, status: entryStatus } : p))
+
+    const tenants =
+      tenant && payment.forMonth === cycleKeyFor(tenant)
+        ? db.tenants.map((t) =>
+            t.id === payment.tenantId
+              ? { ...t, rentStatus: computeMonthlyRentStatus(payments, payment.tenantId, payment.forMonth, t.rent) }
+              : t,
+          )
+        : db.tenants
+
+    return { ...db, payments, tenants }
+  })
+}
+
 export function deletePayment(paymentId: string): void {
   updateDemoDb((db) => {
     const payment = db.payments.find((p) => p.id === paymentId)
     if (!payment) return db
     const remaining = db.payments.filter((p) => p.id !== paymentId)
-    const currentMonthForMonth = `${localMonthKey(new Date())}-01`
-    if (payment.forMonth !== currentMonthForMonth) {
+    const tenant = db.tenants.find((t) => t.id === payment.tenantId)
+    if (!tenant || payment.forMonth !== cycleKeyFor(tenant)) {
       return { ...db, payments: remaining }
     }
-    const tenant = db.tenants.find((t) => t.id === payment.tenantId)
-    const newStatus = tenant ? computeMonthlyRentStatus(remaining, payment.tenantId, currentMonthForMonth, tenant.rent) : 'pending'
+    const newStatus = computeMonthlyRentStatus(remaining, payment.tenantId, payment.forMonth, tenant.rent)
     return {
       ...db,
       payments: remaining,
@@ -728,6 +766,7 @@ export interface AddLoanRepaymentInput {
   amount: number
   paymentDate: string
   notes: string | null
+  imageUrls: string[]
 }
 
 export function addLoanRepayment(input: AddLoanRepaymentInput): DemoLoanRepayment {
@@ -735,6 +774,25 @@ export function addLoanRepayment(input: AddLoanRepaymentInput): DemoLoanRepaymen
   updateDemoDb((db) => ({ ...db, loanRepayments: [...db.loanRepayments, repayment] }))
   pushNotification('expense', 'Loan repayment recorded', `${formatCurrency(input.amount)} repaid towards a loan.`)
   return repayment
+}
+
+export interface UpdateLoanRepaymentInput {
+  id: string
+  amount: number
+  paymentDate: string
+  notes: string | null
+  imageUrls: string[]
+}
+
+export function updateLoanRepayment(input: UpdateLoanRepaymentInput): void {
+  updateDemoDb((db) => ({
+    ...db,
+    loanRepayments: db.loanRepayments.map((r) =>
+      r.id === input.id
+        ? { ...r, amount: input.amount, paymentDate: input.paymentDate, notes: input.notes, imageUrls: input.imageUrls }
+        : r,
+    ),
+  }))
 }
 
 export function deleteLoanRepayment(repaymentId: string): void {
@@ -780,6 +838,39 @@ export function updateExpense(input: UpdateExpenseInput): void {
 
 export function deleteExpense(expenseId: string): void {
   updateDemoDb((db) => ({ ...db, expenses: db.expenses.filter((e) => e.id !== expenseId) }))
+}
+
+export interface AddIncomeInput {
+  category: IncomeCategory
+  amount: number
+  incomeDate: string
+  description: string | null
+}
+
+export function addIncome(input: AddIncomeInput): DemoIncome {
+  const income: DemoIncome = { id: crypto.randomUUID(), ...input, createdAt: new Date().toISOString() }
+  updateDemoDb((db) => ({ ...db, incomes: [...db.incomes, income] }))
+  pushNotification('payment', 'Income added', `${formatCurrency(input.amount)} income recorded.`)
+  return income
+}
+
+export interface UpdateIncomeInput extends AddIncomeInput {
+  id: string
+}
+
+export function updateIncome(input: UpdateIncomeInput): void {
+  updateDemoDb((db) => ({
+    ...db,
+    incomes: db.incomes.map((i) =>
+      i.id === input.id
+        ? { ...i, category: input.category, amount: input.amount, incomeDate: input.incomeDate, description: input.description }
+        : i,
+    ),
+  }))
+}
+
+export function deleteIncome(incomeId: string): void {
+  updateDemoDb((db) => ({ ...db, incomes: db.incomes.filter((i) => i.id !== incomeId) }))
 }
 
 export interface SendBroadcastInput {
