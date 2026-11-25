@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { deleteAllUploadedFiles } from '@/lib/storage'
 import type { OnboardingInput } from '../types'
 
 export async function getOnboardingStatus(): Promise<boolean> {
@@ -81,17 +82,23 @@ export async function updateProfile(input: OnboardingInput): Promise<void> {
 
 /** Deletes all of the owner's data (residency, tenants, payments, loans,
  * expenses, income, notifications, uploaded files) but keeps the account and
- * sign-in, via the `clear_app_data` RPC (migration 0009). */
+ * sign-in, via the `clear_app_data` RPC (migration 0010) plus the Storage API
+ * for uploaded files. */
 export async function clearAppData(): Promise<void> {
   const { error } = await supabase.rpc('clear_app_data')
   if (error) throw error
+  // The rows are already gone; leftover files are harmless orphans, so a
+  // failure here shouldn't report the whole reset as failed.
+  await deleteAllUploadedFiles().catch(() => undefined)
 }
 
 /** Permanently deletes the owner's account: all cloud data (building, settings
  * and everything cascading from them, plus uploaded files) and the auth user
- * itself, via the `delete_account` RPC (migration 0006). Local data is
- * wiped by the caller. */
+ * itself, via the `delete_account` RPC (migration 0010). Local data is
+ * wiped by the caller. Files go first: once the auth user is deleted there is
+ * no session left to remove them with. */
 export async function clearAccountData(): Promise<void> {
+  await deleteAllUploadedFiles()
   const { error } = await supabase.rpc('delete_account')
   if (error) throw error
 }
