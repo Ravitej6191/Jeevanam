@@ -3,6 +3,8 @@ import { Capacitor, registerPlugin } from '@capacitor/core'
 interface JeevanamSmsPlugin {
   send(options: { to: string; message: string }): Promise<{ ok: boolean; error?: string }>
   status(): Promise<{ supported: boolean; simReady: boolean }>
+  checkPermissions(): Promise<{ sms: 'granted' | 'denied' | 'prompt' | 'prompt-with-rationale' }>
+  requestPermissions(): Promise<{ sms: 'granted' | 'denied' | 'prompt' | 'prompt-with-rationale' }>
 }
 
 /** Native Android plugin (plugins/jeevanam-sms) that sends an SMS directly. */
@@ -17,6 +19,17 @@ export function canSendSms(): boolean {
 export function toSmsNumber(phone: string): string {
   const digits = phone.replace(/\D/g, '')
   return digits.length === 10 && /^[6-9]/.test(digits) ? `+91${digits}` : digits.length > 10 ? `+${digits}` : digits
+}
+
+/** Shows Android's "allow SMS?" prompt (nothing happens if it's already allowed). */
+export async function requestSmsPermission(): Promise<boolean> {
+  try {
+    const current = await JeevanamSms.checkPermissions()
+    if (current.sms === 'granted') return true
+    return (await JeevanamSms.requestPermissions()).sms === 'granted'
+  } catch {
+    return false
+  }
 }
 
 export type SmsResult = { ok: true } | { ok: false; error: string; permissionDenied?: boolean }

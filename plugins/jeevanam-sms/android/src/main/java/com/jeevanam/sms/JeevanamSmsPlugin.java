@@ -143,7 +143,7 @@ public class JeevanamSmsPlugin extends Plugin {
             case SmsManager.RESULT_ERROR_NULL_PDU:
                 return "The number or message is not valid.";
             default:
-                return "The phone could not send it.";
+                return "The phone could not send it. Check that the SIM has an active plan with SMS.";
         }
     }
 
@@ -165,7 +165,7 @@ public class JeevanamSmsPlugin extends Plugin {
         }
 
         void armTimeout() {
-            handler.postDelayed(() -> fail("The phone did not confirm sending."), REPORT_TIMEOUT_MS);
+            handler.postDelayed(() -> fail("The phone did not confirm sending. Check the SIM has signal and an active plan."), REPORT_TIMEOUT_MS);
         }
 
         @Override

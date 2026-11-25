@@ -82,7 +82,7 @@ export function ResidencyPage() {
           <>
             <div className="grid grid-cols-3 gap-2">
               <KpiTile
-                label="Tenants"
+                label={activeTenantCount === 1 ? 'Tenant' : 'Tenants'}
                 value={activeTenantCount}
                 icon={Users}
                 tone="text-info"

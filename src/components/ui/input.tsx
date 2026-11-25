@@ -2,10 +2,15 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-function Input({ className, type, ...props }: React.ComponentProps<"input">) {
+function Input({ className, type, onFocus, ...props }: React.ComponentProps<"input">) {
   return (
     <input
       type={type}
+      onFocus={(event) => {
+        // A starting "0" in a number box is selected so typing replaces it.
+        if (type === "number" && event.target.value === "0") event.target.select()
+        onFocus?.(event)
+      }}
       data-slot="input"
       className={cn(
         "h-10 w-full min-w-0 rounded-lg border border-input bg-background/60 px-3 py-1 text-base shadow-xs transition-[color,box-shadow,border-color] outline-none selection:bg-primary selection:text-primary-foreground file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm dark:bg-input/30",
