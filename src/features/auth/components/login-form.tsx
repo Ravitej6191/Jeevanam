@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core'
 import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { motion } from 'motion/react'
@@ -25,6 +26,10 @@ export function LoginForm() {
     setIsSigningIn(true)
     try {
       await signInWithGoogle(from)
+      // In a browser the page navigates away, so the spinner can stay. In the
+      // phone app the sign-in opens in a separate browser and the owner may
+      // come back without finishing, so the button must be usable again.
+      if (Capacitor.isNativePlatform()) setIsSigningIn(false)
     } catch {
       toast.error('Could not sign in with Google. Please try again.')
       setIsSigningIn(false)

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Capacitor } from '@capacitor/core'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Controller, useForm } from 'react-hook-form'
 import { z } from 'zod'
@@ -19,7 +20,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useBuildingData } from '@/features/building/hooks/use-building-data'
-import { sendBroadcast } from '@/features/broadcast/services/broadcast.service'
+import { logBroadcast, sendBroadcast } from '@/features/broadcast/services/broadcast.service'
+import { WhatsAppSendList, type SendRecipient } from '@/features/broadcast/components/whatsapp-send-list'
 import { uploadTenantFile } from '@/lib/storage'
 import type { Tenant } from '@/types/domain'
 import { usePageTitle } from '@/hooks/use-page-title'
@@ -41,6 +43,8 @@ export function BroadcastPage() {
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [isUploadingImage, setIsUploadingImage] = useState(false)
+  const [phoneSend, setPhoneSend] = useState<{ recipients: SendRecipient[]; text: string; imageUrl: string | null; label: string; rawMessage: string } | null>(null)
+  const isNative = Capacitor.isNativePlatform()
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const objectUrlRef = useRef<string | null>(null)
@@ -104,36 +108,44 @@ export function BroadcastPage() {
     defaultValues: { message: '', audience: 'all' },
   })
 
-  const resolveRecipients = (audience: string): { phones: string[]; label: string } => {
-    if (audience === 'all') {
-      return { phones: allTenants.map((t) => t.phone), label: 'All Tenants' }
-    }
+  const resolveAudience = (audience: string): { tenants: Tenant[]; label: string } => {
+    if (audience === 'all') return { tenants: allTenants, label: 'All Tenants' }
     if (audience === 'pending_rent') {
-      return {
-        phones: allTenants.filter((t) => t.rentStatus !== 'paid').map((t) => t.phone),
-        label: 'Pending Rent',
-      }
+      return { tenants: allTenants.filter((t) => t.rentStatus !== 'paid'), label: 'Pending Rent' }
     }
     if (audience === 'pending_deposit') {
-      return {
-        phones: allTenants.filter((t) => !t.depositRecord).map((t) => t.phone),
-        label: 'Pending Deposit',
-      }
+      return { tenants: allTenants.filter((t) => !t.depositRecord), label: 'Pending Deposit' }
     }
     if (audience.startsWith('floor:')) {
       const floorId = audience.slice('floor:'.length)
       const floor = building?.floors.find((f) => f.id === floorId)
-      return {
-        phones: allTenants.filter((t) => t.floorId === floorId).map((t) => t.phone),
-        label: floor?.name ?? 'Floor',
-      }
+      return { tenants: allTenants.filter((t) => t.floorId === floorId), label: floor?.name ?? 'Floor' }
     }
     if (audience.startsWith('tenant:')) {
       const tenant = allTenants.find((t) => t.id === audience.slice('tenant:'.length))
-      return { phones: tenant ? [tenant.phone] : [], label: tenant?.name ?? 'Tenant' }
+      return { tenants: tenant ? [tenant] : [], label: tenant?.name ?? 'Tenant' }
     }
-    return { phones: [], label: 'Unknown' }
+    return { tenants: [], label: 'Unknown' }
   }
+
+  const finishPhoneSend = useMutation({
+    mutationFn: async (openedCount: number) => {
+      if (!phoneSend) return
+      await logBroadcast({
+        message: phoneSend.rawMessage,
+        imageUrl: phoneSend.imageUrl,
+        audience: phoneSend.label,
+        recipientCount: phoneSend.recipients.length,
+        deliveredCount: openedCount,
+      })
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['notifications'] })
+      toast.success('Broadcast saved')
+      navigate(-1)
+    },
+    onError: () => toast.error('Could not save the broadcast. Please try again.'),
+  })
 
   const mutation = useMutation({
     mutationFn: sendBroadcast,
@@ -166,8 +178,34 @@ export function BroadcastPage() {
       }
       setIsUploadingImage(false)
     }
-    const { phones, label } = resolveRecipients(values.audience)
-    mutation.mutate({ message: values.message, imageUrl, audience: label, recipients: phones })
+    const { tenants, label } = resolveAudience(values.audience)
+    if (tenants.length === 0) {
+      toast.warning('No tenants matched this audience — nothing was sent.')
+      return
+    }
+    if (isNative) {
+      const seen = new Set<string>()
+      const recipients = tenants
+        .filter((t) => !seen.has(t.phone) && seen.add(t.phone))
+        .map((t) => ({ id: t.id, name: t.name, phone: t.phone }))
+      // WhatsApp links carry text only, so a photo goes along as a link.
+      const text = imageUrl ? `${values.message}\n${imageUrl}` : values.message
+      setPhoneSend({ recipients, text, imageUrl, label, rawMessage: values.message })
+      return
+    }
+    mutation.mutate({ message: values.message, imageUrl, audience: label, recipients: tenants.map((t) => t.phone) })
+  }
+
+  if (phoneSend) {
+    return (
+      <WhatsAppSendList
+        recipients={phoneSend.recipients}
+        message={phoneSend.text}
+        isFinishing={finishPhoneSend.isPending}
+        onFinish={(openedCount) => finishPhoneSend.mutate(openedCount)}
+        onBack={() => setPhoneSend(null)}
+      />
+    )
   }
 
   return (
@@ -262,7 +300,7 @@ export function BroadcastPage() {
 
       <Button type="submit" className="w-full" disabled={mutation.isPending || isUploadingImage}>
         {mutation.isPending || isUploadingImage ? <Loader2 className="size-4 animate-spin" /> : null}
-        Send Broadcast
+        {isNative ? 'Continue' : 'Send Broadcast'}
       </Button>
     </form>
   )

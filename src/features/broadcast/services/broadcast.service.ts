@@ -15,21 +15,14 @@ export interface SendBroadcastResult {
   failed: { phone: string; error?: string }[]
 }
 
-/** Sends the message to every recipient phone number over the owner's own
- * connected WhatsApp session, then logs the broadcast locally (recipient
- * counts, timestamp) regardless of delivery outcome so the history and
- * notification always reflect what was attempted. */
-export async function sendBroadcast(input: SendBroadcastInput): Promise<SendBroadcastResult> {
-  const uniqueRecipients = Array.from(new Set(input.recipients.filter(Boolean)))
-
-  const results = await Promise.all(
-    uniqueRecipients.map((phone) => sendWhatsAppMessage(phone, input.message, input.imageUrl)),
-  )
-
-  const failed = results.filter((r) => !r.ok).map((r) => ({ phone: r.to, error: r.error }))
-  const deliveredCount = uniqueRecipients.length - failed.length
-  const recipientCount = uniqueRecipients.length
-
+/** Records a broadcast in the history and the notification feed. */
+export async function logBroadcast(input: {
+  message: string
+  imageUrl: string | null
+  audience: string
+  recipientCount: number
+  deliveredCount: number
+}): Promise<void> {
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -47,8 +40,8 @@ export async function sendBroadcast(input: SendBroadcastInput): Promise<SendBroa
     message: input.message,
     image_url: input.imageUrl,
     audience: input.audience,
-    recipient_count: recipientCount,
-    delivered_count: deliveredCount,
+    recipient_count: input.recipientCount,
+    delivered_count: input.deliveredCount,
   })
   if (insertError) throw insertError
 
@@ -56,8 +49,26 @@ export async function sendBroadcast(input: SendBroadcastInput): Promise<SendBroa
     buildingRow.id,
     'broadcast',
     'Broadcast sent',
-    `Delivered to ${deliveredCount}/${recipientCount} tenant${recipientCount === 1 ? '' : 's'} (${input.audience}).`,
+    `Delivered to ${input.deliveredCount}/${input.recipientCount} tenant${input.recipientCount === 1 ? '' : 's'} (${input.audience}).`,
   )
+}
+
+/** Sends the message to every recipient phone number over the owner's own
+ * connected WhatsApp session (the PC server), then logs the broadcast
+ * regardless of delivery outcome so the history and notification always
+ * reflect what was attempted. */
+export async function sendBroadcast(input: SendBroadcastInput): Promise<SendBroadcastResult> {
+  const uniqueRecipients = Array.from(new Set(input.recipients.filter(Boolean)))
+
+  const results = await Promise.all(
+    uniqueRecipients.map((phone) => sendWhatsAppMessage(phone, input.message, input.imageUrl)),
+  )
+
+  const failed = results.filter((r) => !r.ok).map((r) => ({ phone: r.to, error: r.error }))
+  const deliveredCount = uniqueRecipients.length - failed.length
+  const recipientCount = uniqueRecipients.length
+
+  await logBroadcast({ message: input.message, imageUrl: input.imageUrl, audience: input.audience, recipientCount, deliveredCount })
 
   return { recipientCount, deliveredCount, failed }
 }

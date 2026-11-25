@@ -34,3 +34,11 @@ server/auth_info*/
 *.njsproj
 *.sln
 *.sw?
+
+# Android release signing — never commit
+*.jks
+*.keystore
+keystore.properties
+
+# Built APKs
+/release/

@@ -8,19 +8,9 @@ import { ConfirmSheet } from '@/components/common/confirm-sheet'
 import { clearAccountData, clearAppData } from '@/features/onboarding/services/onboarding.service'
 import { useAuth } from '@/providers/auth-context'
 import { wipeLocalDataAndRestart } from '@/lib/local-data'
+import { saveFile } from '@/lib/save-file'
 import { todayIso } from '@/utils/format'
 import { backupToXlsx, exportBackup } from '../services/data-transfer.service'
-
-function downloadBlob(filename: string, blob: Blob) {
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  document.body.append(link)
-  link.click()
-  link.remove()
-  URL.revokeObjectURL(url)
-}
 
 interface RowProps {
   icon: ReactNode
@@ -60,9 +50,9 @@ export function DataCard() {
 
   const exportMutation = useMutation({
     mutationFn: async () => backupToXlsx(await exportBackup()),
-    onSuccess: (blob) => {
-      downloadBlob(`jeevanam-export-${todayIso()}.xlsx`, blob)
-      toast.success('Excel file downloaded')
+    onSuccess: async (blob) => {
+      await saveFile(`jeevanam-export-${todayIso()}.xlsx`, blob)
+      toast.success('Excel file ready')
     },
     onError: () => toast.error('Could not export your data. Please try again.'),
   })
