@@ -32,7 +32,7 @@ export function LoansPage() {
           {!isError && loans && loans.length > 0 ? (
             <div className="grid grid-cols-3 gap-2.5">
               <SummaryCard label="Total Lent" value={formatCurrency(totals.lent)} tone="text-foreground" />
-              <SummaryCard label="Paid till now" value={formatCurrency(totals.paid)} tone="text-success" />
+              <SummaryCard label="Paid Till Now" value={formatCurrency(totals.paid)} tone="text-success" />
               <SummaryCard label="Balance" value={formatCurrency(totals.balance)} tone="text-danger" />
             </div>
           ) : null}

@@ -1,12 +1,11 @@
-import { Suspense, type ReactNode } from 'react'
 import { createBrowserRouter, Navigate } from 'react-router-dom'
-import { Loader2 } from 'lucide-react'
 import { AppLayout } from '@/layouts/app-layout'
 import { AuthLayout } from '@/layouts/auth-layout'
 import { ProtectedRoute } from './protected-route'
 import { BootstrapGate } from './bootstrap-gate'
 import { RouteError } from './route-error'
 import { lazyRetry } from './lazy-retry'
+import { PageSuspense } from './page-suspense'
 
 const LoginPage = lazyRetry(() => import('@/pages/login-page').then((m) => ({ default: m.LoginPage })))
 const DashboardPage = lazyRetry(() => import('@/pages/dashboard-page').then((m) => ({ default: m.DashboardPage })))
@@ -41,25 +40,13 @@ const WhatsAppIntegrationPage = lazyRetry(() =>
 )
 const NotFoundPage = lazyRetry(() => import('@/pages/not-found-page').then((m) => ({ default: m.NotFoundPage })))
 
-function PageFallback() {
-  return (
-    <div className="flex min-h-[50vh] items-center justify-center">
-      <Loader2 className="size-6 animate-spin text-muted-foreground" />
-    </div>
-  )
-}
-
-function withSuspense(element: ReactNode) {
-  return <Suspense fallback={<PageFallback />}>{element}</Suspense>
-}
-
 export const router = createBrowserRouter([
   {
     errorElement: <RouteError />,
     children: [
   {
     element: <AuthLayout />,
-    children: [{ path: '/login', element: withSuspense(<LoginPage />) }],
+    children: [{ path: '/login', element: <PageSuspense><LoginPage /></PageSuspense> }],
   },
   {
     element: <ProtectedRoute />,
@@ -71,33 +58,33 @@ export const router = createBrowserRouter([
             element: <AppLayout />,
             children: [
               { path: '/', element: <Navigate to="/dashboard" replace /> },
-              { path: '/dashboard', element: withSuspense(<DashboardPage />) },
-              { path: '/residency', element: withSuspense(<ResidencyPage />) },
+              { path: '/dashboard', element: <PageSuspense><DashboardPage /></PageSuspense> },
+              { path: '/residency', element: <PageSuspense><ResidencyPage /></PageSuspense> },
               { path: '/building', element: <Navigate to="/residency" replace /> },
-              { path: '/loans', element: withSuspense(<LoansPage />) },
-              { path: '/loans/record-repayment', element: withSuspense(<RecordLoanRepaymentPage />) },
-              { path: '/loans/:id', element: withSuspense(<LoanDetailPage />) },
-              { path: '/tenants', element: withSuspense(<TenantsPage />) },
-              { path: '/tenants/new', element: withSuspense(<AddTenantPage />) },
-              { path: '/tenants/record-payment', element: withSuspense(<RecordPaymentPage />) },
-              { path: '/tenants/:id', element: withSuspense(<TenantDetailPage />) },
-              { path: '/tenants/:id/edit', element: withSuspense(<AddTenantPage />) },
-              { path: '/expenses', element: withSuspense(<ExpensesPage />) },
+              { path: '/loans', element: <PageSuspense><LoansPage /></PageSuspense> },
+              { path: '/loans/record-repayment', element: <PageSuspense><RecordLoanRepaymentPage /></PageSuspense> },
+              { path: '/loans/:id', element: <PageSuspense><LoanDetailPage /></PageSuspense> },
+              { path: '/tenants', element: <PageSuspense><TenantsPage /></PageSuspense> },
+              { path: '/tenants/new', element: <PageSuspense><AddTenantPage /></PageSuspense> },
+              { path: '/tenants/record-payment', element: <PageSuspense><RecordPaymentPage /></PageSuspense> },
+              { path: '/tenants/:id', element: <PageSuspense><TenantDetailPage /></PageSuspense> },
+              { path: '/tenants/:id/edit', element: <PageSuspense><AddTenantPage /></PageSuspense> },
+              { path: '/expenses', element: <PageSuspense><ExpensesPage /></PageSuspense> },
 
 
-              { path: '/broadcast', element: withSuspense(<BroadcastPage />) },
-              { path: '/settings', element: withSuspense(<SettingsPage />) },
-              { path: '/settings/past-tenants', element: withSuspense(<PastTenantsPage />) },
-              { path: '/settings/edit-profile', element: withSuspense(<EditProfilePage />) },
-              { path: '/settings/whatsapp', element: withSuspense(<WhatsAppIntegrationPage />) },
-              { path: '/notifications', element: withSuspense(<NotificationsPage />) },
+              { path: '/broadcast', element: <PageSuspense><BroadcastPage /></PageSuspense> },
+              { path: '/settings', element: <PageSuspense><SettingsPage /></PageSuspense> },
+              { path: '/settings/past-tenants', element: <PageSuspense><PastTenantsPage /></PageSuspense> },
+              { path: '/settings/edit-profile', element: <PageSuspense><EditProfilePage /></PageSuspense> },
+              { path: '/settings/whatsapp', element: <PageSuspense><WhatsAppIntegrationPage /></PageSuspense> },
+              { path: '/notifications', element: <PageSuspense><NotificationsPage /></PageSuspense> },
             ],
           },
         ],
       },
     ],
   },
-  { path: '*', element: withSuspense(<NotFoundPage />) },
+  { path: '*', element: <PageSuspense><NotFoundPage /></PageSuspense> },
     ],
   },
 ])

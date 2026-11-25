@@ -1,13 +1,7 @@
-import { isDemoSession } from '@/config/env'
 import { supabase } from '@/lib/supabase'
-import { getDemoDb, seedFromOnboarding, updateBuildingProfile } from '@/lib/demo-store'
 import type { OnboardingInput } from '../types'
 
 export async function getOnboardingStatus(): Promise<boolean> {
-  if (isDemoSession()) {
-    return getDemoDb().settings.onboardingCompleted
-  }
-
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -57,10 +51,6 @@ async function upsertProfileToSupabase(input: OnboardingInput): Promise<void> {
 }
 
 async function completeOnboarding(input: OnboardingInput): Promise<void> {
-  if (isDemoSession()) {
-    seedFromOnboarding(input)
-    return
-  }
   await upsertProfileToSupabase(input)
 }
 
@@ -72,7 +62,7 @@ async function completeOnboarding(input: OnboardingInput): Promise<void> {
 export async function skipOnboarding(profile: { ownerName?: string; email?: string; phone?: string } = {}): Promise<void> {
   await completeOnboarding({
     propertyType: 'pg',
-    buildingName: 'My Property',
+    buildingName: 'My Residency',
     address: '',
     city: '',
     state: '',
@@ -86,31 +76,22 @@ export async function skipOnboarding(profile: { ownerName?: string; email?: stri
 /** Updates building/owner profile fields without touching the existing
  * floors/houses/tenants — used by the Settings "edit profile" flow. */
 export async function updateProfile(input: OnboardingInput): Promise<void> {
-  if (isDemoSession()) {
-    updateBuildingProfile({
-      name: input.buildingName,
-      propertyType: input.propertyType,
-      address: input.address,
-      city: input.city,
-      state: input.state,
-      pincode: input.pincode,
-      contactPhone: input.phone,
-      contactEmail: input.email,
-      ownerName: input.ownerName,
-    })
-    return
-  }
   await upsertProfileToSupabase(input)
+}
+
+/** Deletes all of the owner's data (residency, tenants, payments, loans,
+ * expenses, income, notifications, uploaded files) but keeps the account and
+ * sign-in, via the `clear_app_data` RPC (migration 0009). */
+export async function clearAppData(): Promise<void> {
+  const { error } = await supabase.rpc('clear_app_data')
+  if (error) throw error
 }
 
 /** Permanently deletes the owner's account: all cloud data (building, settings
  * and everything cascading from them, plus uploaded files) and the auth user
- * itself, via the `delete_account` RPC (migration 0006). Demo mode has no
- * cloud, so there's nothing to delete remotely — local data is wiped by the
- * caller either way. */
+ * itself, via the `delete_account` RPC (migration 0006). Local data is
+ * wiped by the caller. */
 export async function clearAccountData(): Promise<void> {
-  if (isDemoSession()) return
-
   const { error } = await supabase.rpc('delete_account')
   if (error) throw error
 }

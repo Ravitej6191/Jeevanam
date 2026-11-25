@@ -1,13 +1,5 @@
-import { isDemoSession } from '@/config/env'
 import { supabase } from '@/lib/supabase'
-import {
-  addIncome as demoAddIncome,
-  deleteIncome as demoDeleteIncome,
-  getDemoDb,
-  updateIncome as demoUpdateIncome,
-  type AddIncomeInput,
-  type UpdateIncomeInput,
-} from '@/lib/demo-store'
+import type { IncomeCategory } from '@/types/database.types'
 import { pushSupabaseNotification } from '@/features/notifications/services/notifications.service'
 import { formatCurrency } from '@/utils/format'
 import type { Income } from '../types'
@@ -24,12 +16,6 @@ async function getBuildingId(): Promise<string> {
 }
 
 export async function getIncomes(): Promise<Income[]> {
-  if (isDemoSession()) {
-    return getDemoDb()
-      .incomes.map((i) => ({ ...i }))
-      .sort((a, b) => b.incomeDate.localeCompare(a.incomeDate))
-  }
-
   const buildingId = await getBuildingId()
   const { data, error } = await supabase
     .from('incomes')
@@ -48,14 +34,14 @@ export async function getIncomes(): Promise<Income[]> {
   }))
 }
 
-export type CreateIncomeInput = AddIncomeInput
+export interface CreateIncomeInput {
+  category: IncomeCategory
+  amount: number
+  incomeDate: string
+  description: string | null
+}
 
 export async function createIncome(input: CreateIncomeInput): Promise<void> {
-  if (isDemoSession()) {
-    demoAddIncome(input)
-    return
-  }
-
   const buildingId = await getBuildingId()
   const { error } = await supabase.from('incomes').insert({
     building_id: buildingId,
@@ -66,17 +52,14 @@ export async function createIncome(input: CreateIncomeInput): Promise<void> {
   })
   if (error) throw error
 
-  await pushSupabaseNotification(buildingId, 'payment', 'Income added', `${formatCurrency(input.amount)} income recorded.`)
+  await pushSupabaseNotification(buildingId, 'income', 'Income added', `${formatCurrency(input.amount)} income recorded.`)
 }
 
-export type EditIncomeInput = UpdateIncomeInput
+export interface EditIncomeInput extends CreateIncomeInput {
+  id: string
+}
 
 export async function updateIncome(input: EditIncomeInput): Promise<void> {
-  if (isDemoSession()) {
-    demoUpdateIncome(input)
-    return
-  }
-
   const { error } = await supabase
     .from('incomes')
     .update({
@@ -90,11 +73,6 @@ export async function updateIncome(input: EditIncomeInput): Promise<void> {
 }
 
 export async function deleteIncome(incomeId: string): Promise<void> {
-  if (isDemoSession()) {
-    demoDeleteIncome(incomeId)
-    return
-  }
-
   const { error } = await supabase.from('incomes').delete().eq('id', incomeId)
   if (error) throw error
 }

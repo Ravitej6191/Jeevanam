@@ -1,4 +1,5 @@
 import { BadgeIndianRupee, Gift, HandCoins, Landmark, RotateCcw, Store, type LucideIcon } from 'lucide-react'
+import { FlowArrow } from '@/features/transactions/components/flow-arrow'
 import { formatCurrency, formatDate } from '@/utils/format'
 import { incomeCategoryLabel, type Income, type IncomeCategory } from '../types'
 
@@ -30,6 +31,7 @@ export function IncomeListItem({ income, onSelect }: { income: Income; onSelect:
           {income.description ? ` · ${income.description}` : ''}
         </p>
       </div>
+      <FlowArrow direction="in" />
       <p className="font-numeric text-sm font-semibold text-success">+{formatCurrency(income.amount)}</p>
     </button>
   )

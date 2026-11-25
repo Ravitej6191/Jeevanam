@@ -16,7 +16,7 @@ import type { DashboardRange } from '@/features/dashboard/types'
 import { formatCurrency } from '@/utils/format'
 import { getTimeOfDayGreeting } from '@/utils/greeting'
 import { usePageTitle } from '@/hooks/use-page-title'
-import { useAuth } from '@/providers/auth-provider'
+import { useAuth } from '@/providers/auth-context'
 
 const rangeOptions: { value: DashboardRange; label: string }[] = [
   { value: 'week', label: 'This Week' },
@@ -146,7 +146,7 @@ function SetupChecklist({ navigate }: { navigate: NavigateFunction }) {
       className="space-y-3 rounded-xl border border-dashed border-primary/30 bg-gradient-to-b from-primary/8 to-transparent p-4"
     >
       <div>
-        <p className="text-sm font-semibold text-foreground">Get your property set up</p>
+        <p className="text-sm font-semibold text-foreground">Set up your residency</p>
         <p className="mt-0.5 text-xs text-muted-foreground">A couple of quick steps before you can start tracking rent.</p>
       </div>
       <div className="space-y-2">

@@ -1,13 +1,17 @@
+import { useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { AppHeader } from '@/components/common/app-header'
 import { BottomNav } from '@/components/common/bottom-nav'
 import { SidebarNav } from '@/components/common/sidebar-nav'
 import { WelcomeDrawer } from '@/components/common/welcome-drawer'
+import { isWelcomeSeen } from '@/components/common/welcome-seen'
+import { ProfilePromptDrawer } from '@/features/onboarding/components/profile-prompt-drawer'
 import { useExitConfirm } from '@/hooks/use-exit-confirm'
 
 export function AppLayout() {
   const location = useLocation()
+  const [welcomeSeen, setWelcomeSeen] = useState(isWelcomeSeen)
   useExitConfirm()
 
   return (
@@ -27,7 +31,8 @@ export function AppLayout() {
         </main>
         <BottomNav />
       </div>
-      <WelcomeDrawer />
+      <WelcomeDrawer onDismiss={() => setWelcomeSeen(true)} />
+      <ProfilePromptDrawer ready={welcomeSeen} />
     </div>
   )
 }

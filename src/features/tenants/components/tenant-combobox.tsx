@@ -38,7 +38,7 @@ export function TenantCombobox({ tenants, value, onChange, emptyText = 'No tenan
       </PopoverTrigger>
       <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
         <Command>
-          <CommandInput placeholder="Search tenants..." />
+          <CommandInput placeholder="Search tenants" />
           <CommandList>
             <CommandEmpty>{emptyText}</CommandEmpty>
             <CommandGroup>

@@ -1,20 +1,36 @@
-import { isDemoSession } from '@/config/env'
 import { supabase } from '@/lib/supabase'
-import {
-  clearAllNotifications as demoClearAllNotifications,
-  getNotifications as demoGetNotifications,
-  markAllNotificationsRead as demoMarkAllNotificationsRead,
-  type DemoNotification,
-  type NotificationType,
-} from '@/lib/demo-store'
 
-export type { DemoNotification as AppNotification }
+export type NotificationType =
+  | 'tenant'
+  | 'payment'
+  | 'deposit'
+  | 'expense'
+  | 'income'
+  | 'loan'
+  | 'loan_repayment'
+  | 'broadcast'
 
-export async function getNotifications(): Promise<DemoNotification[]> {
-  if (isDemoSession()) {
-    return demoGetNotifications()
-  }
+/** Notifications saved before the finer types existed only carry a coarse one
+ * ("expense" for loans, "payment" for income and deposits) — recover the real
+ * kind from the title so they get the right icon too. */
+function resolveType(type: string, title: string): NotificationType {
+  if (title.startsWith('Loan repayment')) return 'loan_repayment'
+  if (title.startsWith('Loan')) return 'loan'
+  if (title.startsWith('Income')) return 'income'
+  if (title.startsWith('Deposit')) return 'deposit'
+  return type as NotificationType
+}
 
+export interface AppNotification {
+  id: string
+  type: NotificationType
+  title: string
+  message: string
+  createdAt: string
+  read: boolean
+}
+
+export async function getNotifications(): Promise<AppNotification[]> {
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -36,7 +52,7 @@ export async function getNotifications(): Promise<DemoNotification[]> {
 
   return data.map((n) => ({
     id: n.id,
-    type: n.type as NotificationType,
+    type: resolveType(n.type, n.title),
     title: n.title,
     message: n.message,
     createdAt: n.created_at,
@@ -45,11 +61,6 @@ export async function getNotifications(): Promise<DemoNotification[]> {
 }
 
 export async function clearAllNotifications(): Promise<void> {
-  if (isDemoSession()) {
-    demoClearAllNotifications()
-    return
-  }
-
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -67,11 +78,6 @@ export async function clearAllNotifications(): Promise<void> {
 }
 
 export async function markAllNotificationsRead(): Promise<void> {
-  if (isDemoSession()) {
-    demoMarkAllNotificationsRead()
-    return
-  }
-
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -92,9 +98,8 @@ export async function markAllNotificationsRead(): Promise<void> {
   if (error) throw error
 }
 
-/** Called from the real-Supabase branch of other feature services (tenants,
- * expenses, broadcast) to log an event to the bell feed — mirrors what
- * demo-store's mutators do internally via `pushNotification`. This is a
+/** Called from other feature services (tenants, expenses, broadcast) to log
+ * an event to the bell feed. This is a
  * side-effect of the calling mutation, not the mutation itself, so a
  * failure here is swallowed (logged) rather than thrown — the tenant/
  * payment/expense/broadcast the caller just committed must not get

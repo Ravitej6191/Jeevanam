@@ -1,13 +1,7 @@
-import { isDemoSession } from '@/config/env'
 import { supabase } from '@/lib/supabase'
-import { getDemoDb, resolveTenant } from '@/lib/demo-store'
 import { getCycleStatuses } from '@/features/tenants/services/tenants.service'
 import { dateOnlyIso, monthKey as monthKeyOf, monthKeyOfDateString as monthKey } from '@/utils/format'
 import type { DashboardData, DashboardRange, IncomeExpenseTrendPoint } from '../types'
-
-function currentMonthKey(): string {
-  return monthKeyOf(new Date())
-}
 
 function monthLabel(key: string): string {
   const [year, month] = key.split('-').map(Number)
@@ -65,82 +59,13 @@ function dayKeysThisMonth(): string[] {
 }
 
 /** Earliest date the trend needs to look back to, for a given range —
- * bounds how much history demo-store filters/Supabase queries need to
- * fetch. Returns null for 'all', which has no fixed lower bound. */
+ * bounds how much history the Supabase queries need to fetch. Returns null for 'all', which has no fixed lower bound. */
 function rangeStartDate(range: DashboardRange): string | null {
   const now = new Date()
   if (range === 'week') return dayIso(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6))
   if (range === 'fortnight') return dayIso(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 14))
   if (range === 'month') return dayIso(new Date(now.getFullYear(), now.getMonth(), 1))
   return null
-}
-
-function getDemoData(range: DashboardRange): DashboardData {
-  const db = getDemoDb()
-  const nowKey = currentMonthKey()
-
-  const paymentsThisMonth = db.payments.filter((p) => monthKey(p.paymentDate) === nowKey)
-  const thisMonthTotal =
-    paymentsThisMonth.reduce((sum, p) => sum + p.amount, 0) +
-    db.incomes.filter((i) => monthKey(i.incomeDate) === nowKey).reduce((sum, i) => sum + i.amount, 0)
-
-  const activeTenants = db.tenants.filter((t) => t.status === 'active')
-  const pendingRent = activeTenants
-    .map((t) => resolveTenant(db, t))
-    .filter((t) => t.rentStatus === 'pending')
-    .reduce((sum, t) => sum + t.rent, 0)
-
-  const expensesThisMonth = db.expenses.filter((e) => monthKey(e.expenseDate) === nowKey)
-  const monthlyExpense = expensesThisMonth.reduce((sum, e) => sum + e.amount, 0)
-
-  const occupiedCount = db.tenants.filter((t) => t.status === 'active' && t.houseId !== null).length
-  const totalHouses = db.houses.length
-  const occupancyPercent = totalHouses > 0 ? Math.round((occupiedCount / totalHouses) * 100) : 0
-  const vacantCount = totalHouses - occupiedCount
-
-  const pendingDepositsCount = activeTenants.filter((t) => !t.depositRecord).length
-
-  const loanPaidByLoan = db.loans.map((l) => db.loanRepayments.filter((r) => r.loanId === l.id).reduce((sum, r) => sum + r.amount, 0))
-  const loanStillToPay = db.loans.map((l, i) => Math.max(0, l.amount - loanPaidByLoan[i]!))
-  const loanOutstanding = loanStillToPay.reduce((sum, v) => sum + v, 0)
-  const loanPaidTillNow = loanPaidByLoan.reduce((sum, v) => sum + v, 0)
-  const activeLoansCount = loanStillToPay.filter((v) => v > 0).length
-
-  let trend: IncomeExpenseTrendPoint[]
-  if (range === 'all') {
-    const earliestDate = [...db.payments.map((p) => p.paymentDate), ...db.incomes.map((i) => i.incomeDate), ...db.expenses.map((e) => e.expenseDate)].sort()[0] ?? null
-    trend = allMonthKeysSince(earliestDate).map((key) => ({
-      label: monthLabel(key),
-      income:
-        db.payments.filter((p) => monthKey(p.paymentDate) === key).reduce((s, p) => s + p.amount, 0) +
-        db.incomes.filter((i) => monthKey(i.incomeDate) === key).reduce((s, i) => s + i.amount, 0),
-      expenses: db.expenses.filter((e) => monthKey(e.expenseDate) === key).reduce((s, e) => s + e.amount, 0),
-    }))
-  } else {
-    const dayKeys = range === 'week' ? dayKeysBack(7) : range === 'fortnight' ? dayKeysBack(15) : dayKeysThisMonth()
-    trend = dayKeys.map((key) => ({
-      label: dayLabel(key),
-      income:
-        db.payments.filter((p) => p.paymentDate === key).reduce((s, p) => s + p.amount, 0) +
-        db.incomes.filter((i) => i.incomeDate === key).reduce((s, i) => s + i.amount, 0),
-      expenses: db.expenses.filter((e) => e.expenseDate === key).reduce((s, e) => s + e.amount, 0),
-    }))
-  }
-
-  return {
-    stats: {
-      incomeThisMonth: thisMonthTotal,
-      pendingRent,
-      monthlyExpense,
-      occupancyPercent,
-      vacantCount,
-      pendingDepositsCount,
-      loanOutstanding,
-      loanPaidTillNow,
-      activeLoansCount,
-    },
-    trend,
-  }
 }
 
 function startOfMonthIso(offsetMonths = 0): string {
@@ -319,8 +244,5 @@ async function fetchFromSupabase(range: DashboardRange): Promise<DashboardData> 
 }
 
 export async function getDashboardData(range: DashboardRange = 'all'): Promise<DashboardData> {
-  if (isDemoSession()) {
-    return getDemoData(range)
-  }
   return fetchFromSupabase(range)
 }

@@ -14,6 +14,7 @@ import {
   Wifi,
   type LucideIcon,
 } from 'lucide-react'
+import { FlowArrow } from '@/features/transactions/components/flow-arrow'
 import { formatCurrency, formatDate } from '@/utils/format'
 import { expenseCategoryOptions, type Expense, type ExpenseCategory } from '../types'
 
@@ -79,7 +80,8 @@ export function ExpenseListItem({ expense, onSelect }: ExpenseListItemProps) {
           ) : null}
         </p>
       </div>
-      <p className="font-numeric text-sm font-semibold text-foreground">{formatCurrency(expense.amount)}</p>
+      <FlowArrow direction="out" />
+      <p className="font-numeric text-sm font-semibold text-danger">-{formatCurrency(expense.amount)}</p>
     </button>
   )
 }

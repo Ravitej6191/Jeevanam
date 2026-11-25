@@ -1,18 +1,4 @@
-import { isDemoSession } from '@/config/env'
 import { supabase } from '@/lib/supabase'
-import {
-  addFloor as demoAddFloor,
-  addHouse as demoAddHouse,
-  deleteFloor as demoDeleteFloor,
-  deleteHouse as demoDeleteHouse,
-  getDemoDb,
-  resolveTenant,
-  updateFloor as demoUpdateFloor,
-  updateHouse as demoUpdateHouse,
-  type AddFloorInput,
-  type AddHouseInput,
-  type UpdateHouseInput,
-} from '@/lib/demo-store'
 import { getCycleStatuses } from '@/features/tenants/services/tenants.service'
 import type { RentStatus, TenantRow } from '@/types/database.types'
 import type { Tenant } from '@/types/domain'
@@ -34,47 +20,23 @@ function deriveHouseFlags(tenant: Tenant | null): {
   }
 }
 
-function getDemoData(): BuildingData {
-  const db = getDemoDb()
+interface AddFloorInput {
+  name: string
+  floorNumber: number
+}
 
-  const floors: Floor[] = db.floors
-    .slice()
-    .sort((a, b) => a.floorNumber - b.floorNumber)
-    .map((floor) => {
-      const houses: House[] = db.houses
-        .filter((h) => h.floorId === floor.id)
-        .map((house) => {
-          const demoTenant = db.tenants.find((t) => t.houseId === house.id && t.status === 'active')
-          const tenant = demoTenant ? resolveTenant(db, demoTenant) : null
-          return {
-            id: house.id,
-            floorId: house.floorId,
-            houseNumber: house.houseNumber,
-            gasConnectionNumber: house.gasConnectionNumber,
-            electricityBillNumber: house.electricityBillNumber,
-            tenant,
-            ...deriveHouseFlags(tenant),
-          }
-        })
-      return { id: floor.id, buildingId: floor.buildingId, floorNumber: floor.floorNumber, name: floor.name, houses }
-    })
+interface AddHouseInput {
+  floorId: string
+  houseNumber: string
+  gasConnectionNumber: string | null
+  electricityBillNumber: string | null
+}
 
-  const building: BuildingSummary = {
-    id: db.building.id,
-    name: db.building.name,
-    ownerName: db.settings.ownerName ?? '',
-    propertyType: db.building.propertyType,
-    address: db.building.address,
-    city: db.building.city,
-    state: db.building.state,
-    pincode: db.building.pincode,
-    contactPhone: db.building.contactPhone,
-    contactEmail: db.building.contactEmail,
-    totalFloors: floors.length,
-    totalHouses: db.houses.length,
-  }
-
-  return { building, floors }
+interface UpdateHouseInput {
+  id: string
+  houseNumber: string
+  gasConnectionNumber: string | null
+  electricityBillNumber: string | null
 }
 
 // ---- Real Supabase path (scaffolded; not yet exercised until connected) ----
@@ -213,18 +175,10 @@ async function fetchFromSupabase(): Promise<BuildingData> {
 }
 
 export async function getBuildingData(): Promise<BuildingData> {
-  if (isDemoSession()) {
-    return getDemoData()
-  }
   return fetchFromSupabase()
 }
 
 export async function createFloor(input: AddFloorInput): Promise<void> {
-  if (isDemoSession()) {
-    demoAddFloor(input)
-    return
-  }
-
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -244,21 +198,11 @@ export async function createFloor(input: AddFloorInput): Promise<void> {
 }
 
 export async function updateFloor(floorId: string, name: string): Promise<void> {
-  if (isDemoSession()) {
-    demoUpdateFloor(floorId, name)
-    return
-  }
-
   const { error } = await supabase.from('floors').update({ name }).eq('id', floorId)
   if (error) throw error
 }
 
 export async function deleteFloor(floorId: string): Promise<void> {
-  if (isDemoSession()) {
-    demoDeleteFloor(floorId)
-    return
-  }
-
   const { data: houses, error: housesError } = await supabase.from('houses').select('id').eq('floor_id', floorId)
   if (housesError) throw housesError
   const houseIds = houses.map((h) => h.id)
@@ -278,11 +222,6 @@ export async function deleteFloor(floorId: string): Promise<void> {
 }
 
 export async function createHouse(input: AddHouseInput): Promise<void> {
-  if (isDemoSession()) {
-    demoAddHouse(input)
-    return
-  }
-
   const { error } = await supabase.from('houses').insert({
     floor_id: input.floorId,
     house_number: input.houseNumber,
@@ -293,11 +232,6 @@ export async function createHouse(input: AddHouseInput): Promise<void> {
 }
 
 export async function updateHouse(input: UpdateHouseInput): Promise<void> {
-  if (isDemoSession()) {
-    demoUpdateHouse(input)
-    return
-  }
-
   const { error } = await supabase
     .from('houses')
     .update({
@@ -310,11 +244,6 @@ export async function updateHouse(input: UpdateHouseInput): Promise<void> {
 }
 
 export async function deleteHouse(houseId: string): Promise<void> {
-  if (isDemoSession()) {
-    demoDeleteHouse(houseId)
-    return
-  }
-
   const { count, error: tenantsError } = await supabase
     .from('tenants')
     .select('id', { count: 'exact', head: true })

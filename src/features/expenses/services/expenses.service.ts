@@ -1,32 +1,10 @@
-import { isDemoSession } from '@/config/env'
 import { supabase } from '@/lib/supabase'
-import {
-  addExpense as demoAddExpense,
-  deleteExpense as demoDeleteExpense,
-  getDemoDb,
-  updateExpense as demoUpdateExpense,
-  type AddExpenseInput,
-  type UpdateExpenseInput,
-} from '@/lib/demo-store'
+import type { ExpenseCategory } from '@/types/database.types'
 import { pushSupabaseNotification } from '@/features/notifications/services/notifications.service'
 import { formatCurrency } from '@/utils/format'
 import type { Expense } from '../types'
 
 export async function getExpenses(): Promise<Expense[]> {
-  if (isDemoSession()) {
-    return getDemoDb()
-      .expenses.map((e) => ({
-        id: e.id,
-        category: e.category,
-        amount: e.amount,
-        expenseDate: e.expenseDate,
-        description: e.description,
-        imageUrls: e.imageUrls,
-        createdAt: e.createdAt,
-      }))
-      .sort((a, b) => b.expenseDate.localeCompare(a.expenseDate))
-  }
-
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -57,14 +35,15 @@ export async function getExpenses(): Promise<Expense[]> {
   }))
 }
 
-export type CreateExpenseInput = AddExpenseInput
+export interface CreateExpenseInput {
+  category: ExpenseCategory
+  amount: number
+  expenseDate: string
+  description: string | null
+  imageUrls: string[]
+}
 
 export async function createExpense(input: CreateExpenseInput): Promise<void> {
-  if (isDemoSession()) {
-    demoAddExpense(input)
-    return
-  }
-
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -95,14 +74,11 @@ export async function createExpense(input: CreateExpenseInput): Promise<void> {
   )
 }
 
-export type EditExpenseInput = UpdateExpenseInput
+export interface EditExpenseInput extends CreateExpenseInput {
+  id: string
+}
 
 export async function updateExpense(input: EditExpenseInput): Promise<void> {
-  if (isDemoSession()) {
-    demoUpdateExpense(input)
-    return
-  }
-
   const { error } = await supabase
     .from('expenses')
     .update({
@@ -117,11 +93,6 @@ export async function updateExpense(input: EditExpenseInput): Promise<void> {
 }
 
 export async function deleteExpense(expenseId: string): Promise<void> {
-  if (isDemoSession()) {
-    demoDeleteExpense(expenseId)
-    return
-  }
-
   const { error } = await supabase.from('expenses').delete().eq('id', expenseId)
   if (error) throw error
 }

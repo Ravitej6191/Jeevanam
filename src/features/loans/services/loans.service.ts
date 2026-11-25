@@ -1,45 +1,10 @@
-import { isDemoSession } from '@/config/env'
 import { supabase } from '@/lib/supabase'
-import {
-  addLoan as demoAddLoan,
-  addLoanRepayment as demoAddLoanRepayment,
-  updateLoanRepayment as demoUpdateLoanRepayment,
-  deleteLoan as demoDeleteLoan,
-  deleteLoanRepayment as demoDeleteLoanRepayment,
-  getDemoDb,
-  updateLoan as demoUpdateLoan,
-  type AddLoanInput,
-  type AddLoanRepaymentInput,
-  type UpdateLoanInput,
-  type UpdateLoanRepaymentInput,
-} from '@/lib/demo-store'
+import type { LenderType } from '@/types/database.types'
 import { pushSupabaseNotification } from '@/features/notifications/services/notifications.service'
 import { formatCurrency } from '@/utils/format'
 import type { Loan, LoanRepayment } from '../types'
 
 export async function getLoans(): Promise<Loan[]> {
-  if (isDemoSession()) {
-    const db = getDemoDb()
-    return db.loans
-      .map((l) => {
-        const paidTillNow = db.loanRepayments.filter((r) => r.loanId === l.id).reduce((sum, r) => sum + r.amount, 0)
-        return {
-          id: l.id,
-          lenderType: l.lenderType,
-          lenderName: l.lenderName,
-          amount: l.amount,
-          interestNote: l.interestNote,
-          takenOn: l.takenOn,
-          takenTill: l.takenTill,
-          notes: l.notes,
-          paidTillNow,
-          stillToPay: Math.max(0, l.amount - paidTillNow),
-          createdAt: l.createdAt,
-        }
-      })
-      .sort((a, b) => b.takenOn.localeCompare(a.takenOn))
-  }
-
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -90,27 +55,7 @@ export async function getLoans(): Promise<Loan[]> {
   })
 }
 
-/** Newest repayment first — by the date it was paid, then by when it was entered. */
-function byNewestRepayment(a: { paymentDate: string; createdAt: string }, b: { paymentDate: string; createdAt: string }): number {
-  return b.paymentDate.localeCompare(a.paymentDate) || b.createdAt.localeCompare(a.createdAt)
-}
-
 export async function getLoanRepayments(loanId: string): Promise<LoanRepayment[]> {
-  if (isDemoSession()) {
-    return getDemoDb()
-      .loanRepayments.filter((r) => r.loanId === loanId)
-      .map((r) => ({
-        id: r.id,
-        loanId: r.loanId,
-        amount: r.amount,
-        paymentDate: r.paymentDate,
-        notes: r.notes,
-        imageUrls: r.imageUrls ?? [],
-        createdAt: r.createdAt,
-      }))
-      .sort(byNewestRepayment)
-  }
-
   const { data, error } = await supabase
     .from('loan_repayments')
     .select('id, loan_id, amount, payment_date, notes, receipt_urls, created_at')
@@ -130,14 +75,17 @@ export async function getLoanRepayments(loanId: string): Promise<LoanRepayment[]
   }))
 }
 
-export type CreateLoanInput = AddLoanInput
+export interface CreateLoanInput {
+  lenderType: LenderType
+  lenderName: string | null
+  amount: number
+  interestNote: string | null
+  takenOn: string
+  takenTill: string | null
+  notes: string | null
+}
 
 export async function createLoan(input: CreateLoanInput): Promise<void> {
-  if (isDemoSession()) {
-    demoAddLoan(input)
-    return
-  }
-
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -162,17 +110,14 @@ export async function createLoan(input: CreateLoanInput): Promise<void> {
   })
   if (error) throw error
 
-  await pushSupabaseNotification(buildingRow.id, 'expense', 'Loan added', `${formatCurrency(input.amount)} loan recorded.`)
+  await pushSupabaseNotification(buildingRow.id, 'loan', 'Loan added', `${formatCurrency(input.amount)} loan recorded.`)
 }
 
-export type EditLoanInput = UpdateLoanInput
+export interface EditLoanInput extends CreateLoanInput {
+  id: string
+}
 
 export async function updateLoan(input: EditLoanInput): Promise<void> {
-  if (isDemoSession()) {
-    demoUpdateLoan(input)
-    return
-  }
-
   const { error } = await supabase
     .from('loans')
     .update({
@@ -189,23 +134,19 @@ export async function updateLoan(input: EditLoanInput): Promise<void> {
 }
 
 export async function deleteLoan(loanId: string): Promise<void> {
-  if (isDemoSession()) {
-    demoDeleteLoan(loanId)
-    return
-  }
-
   const { error } = await supabase.from('loans').delete().eq('id', loanId)
   if (error) throw error
 }
 
-export type CreateLoanRepaymentInput = AddLoanRepaymentInput
+export interface CreateLoanRepaymentInput {
+  loanId: string
+  amount: number
+  paymentDate: string
+  notes: string | null
+  imageUrls: string[]
+}
 
 export async function createLoanRepayment(input: CreateLoanRepaymentInput): Promise<void> {
-  if (isDemoSession()) {
-    demoAddLoanRepayment(input)
-    return
-  }
-
   const { data: loanRow, error: loanError } = await supabase
     .from('loans')
     .select('building_id')
@@ -224,20 +165,21 @@ export async function createLoanRepayment(input: CreateLoanRepaymentInput): Prom
 
   await pushSupabaseNotification(
     loanRow.building_id,
-    'expense',
+    'loan_repayment',
     'Loan repayment recorded',
     `${formatCurrency(input.amount)} repaid towards a loan.`,
   )
 }
 
-export type EditLoanRepaymentInput = UpdateLoanRepaymentInput
+export interface EditLoanRepaymentInput {
+  id: string
+  amount: number
+  paymentDate: string
+  notes: string | null
+  imageUrls: string[]
+}
 
 export async function updateLoanRepayment(input: EditLoanRepaymentInput): Promise<void> {
-  if (isDemoSession()) {
-    demoUpdateLoanRepayment(input)
-    return
-  }
-
   const { error } = await supabase
     .from('loan_repayments')
     .update({
@@ -251,11 +193,6 @@ export async function updateLoanRepayment(input: EditLoanRepaymentInput): Promis
 }
 
 export async function deleteLoanRepayment(repaymentId: string): Promise<void> {
-  if (isDemoSession()) {
-    demoDeleteLoanRepayment(repaymentId)
-    return
-  }
-
   const { error } = await supabase.from('loan_repayments').delete().eq('id', repaymentId)
   if (error) throw error
 }

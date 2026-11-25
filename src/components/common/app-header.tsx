@@ -4,7 +4,7 @@ import { usePageHeaderStore } from '@/store/page-header-store'
 import { useUnreadNotificationCount } from '@/features/notifications/hooks/use-notifications'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useBuildingData } from '@/features/building/hooks/use-building-data'
-import { useAuth } from '@/providers/auth-provider'
+import { useAuth } from '@/providers/auth-context'
 
 function initials(name: string) {
   return name.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase()
@@ -18,8 +18,7 @@ export function AppHeader() {
   const { data: unreadCount } = useUnreadNotificationCount()
   const { user } = useAuth()
   const { data: building } = useBuildingData()
-  // The profile the owner saved wins over the sign-in identity (e.g. the demo
-  // placeholder), so the avatar initials follow their real name.
+  // The profile the owner saved wins over the sign-in identity so the avatar initials follow their real name.
   const displayName = building?.building.ownerName || user?.name || ''
 
   return (

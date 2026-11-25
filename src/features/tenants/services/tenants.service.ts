@@ -1,23 +1,4 @@
-import { isDemoSession } from '@/config/env'
 import { supabase } from '@/lib/supabase'
-import {
-  addTenant as demoAddTenant,
-  deleteDeposit as demoDeleteDeposit,
-  deletePayment as demoDeletePayment,
-  getDemoDb,
-  reassignTenant as demoReassignTenant,
-  recordDeposit as demoRecordDeposit,
-  recordPayment as demoRecordPayment,
-  resolveTenant,
-  unassignTenant as demoUnassignTenant,
-  updatePayment as demoUpdatePayment,
-  updateTenant as demoUpdateTenant,
-  vacateTenant as demoVacateTenant,
-  type AddTenantInput as DemoAddTenantInput,
-  type RecordDepositInput as DemoRecordDepositInput,
-  type UpdatePaymentInput as DemoUpdatePaymentInput,
-  type UpdateTenantInput as DemoUpdateTenantInput,
-} from '@/lib/demo-store'
 import { pushSupabaseNotification } from '@/features/notifications/services/notifications.service'
 import { formatCurrency, todayIso } from '@/utils/format'
 import { currentCycle } from '@/utils/rent-cycle'
@@ -87,11 +68,6 @@ function mapTenantRow(row: TenantRow, houseNumber: string, floorName: string, re
 }
 
 export async function getTenants(): Promise<Tenant[]> {
-  if (isDemoSession()) {
-    const db = getDemoDb()
-    return db.tenants.map((t) => resolveTenant(db, t)).sort((a, b) => a.name.localeCompare(b.name))
-  }
-
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -156,24 +132,6 @@ export interface PaymentHistoryItem {
 }
 
 export async function getPaymentHistory(tenantId: string): Promise<PaymentHistoryItem[]> {
-  if (isDemoSession()) {
-    return getDemoDb()
-      .payments.filter((p) => p.tenantId === tenantId)
-      .map((p) => ({
-        id: p.id,
-        amount: p.amount,
-        paymentDate: p.paymentDate,
-        paymentMode: p.paymentMode,
-        forMonth: p.forMonth,
-        status: p.status,
-        receiptNumber: p.receiptNumber,
-        receiptUrl: p.receiptUrl,
-        notes: p.notes,
-        createdAt: p.createdAt,
-      }))
-      .sort((a, b) => b.paymentDate.localeCompare(a.paymentDate))
-  }
-
   const { data, error } = await supabase
     .from('payments')
     .select('id, amount, payment_date, payment_mode, for_month, status, receipt_number, receipt_url, notes, created_at')
@@ -195,13 +153,20 @@ export async function getPaymentHistory(tenantId: string): Promise<PaymentHistor
   }))
 }
 
-export type CreateTenantInput = DemoAddTenantInput
+export interface CreateTenantInput {
+  houseId: string | null
+  name: string
+  phone: string
+  aadhaarNumber: string | null
+  occupation: string | null
+  photoUrl: string | null
+  /** The agreed date rent cycles are anchored to. Defaults to today. */
+  joiningDate?: string
+  rent: number
+  deposit: number
+}
 
 export async function createTenant(input: CreateTenantInput): Promise<string> {
-  if (isDemoSession()) {
-    return demoAddTenant(input).id
-  }
-
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -247,14 +212,19 @@ export async function createTenant(input: CreateTenantInput): Promise<string> {
   return data.id
 }
 
-export type UpdateTenantInput = DemoUpdateTenantInput
+export interface UpdateTenantInput {
+  id: string
+  name: string
+  phone: string
+  aadhaarNumber: string | null
+  occupation: string | null
+  photoUrl: string | null
+  joiningDate: string
+  rent: number
+  deposit: number
+}
 
 export async function updateTenant(input: UpdateTenantInput): Promise<void> {
-  if (isDemoSession()) {
-    demoUpdateTenant(input)
-    return
-  }
-
   const { error } = await supabase
     .from('tenants')
     .update({
@@ -272,11 +242,6 @@ export async function updateTenant(input: UpdateTenantInput): Promise<void> {
 }
 
 export async function reassignTenant(tenantId: string, newHouseId: string): Promise<void> {
-  if (isDemoSession()) {
-    demoReassignTenant(tenantId, newHouseId)
-    return
-  }
-
   const { data: tenantRow, error: tenantFetchError } = await supabase
     .from('tenants')
     .select('house_id')
@@ -301,21 +266,11 @@ export async function reassignTenant(tenantId: string, newHouseId: string): Prom
 /** Frees the tenant's house but keeps them active and unassigned — distinct
  * from `vacateTenant`, which ends their stay entirely. */
 export async function unassignTenant(tenantId: string): Promise<void> {
-  if (isDemoSession()) {
-    demoUnassignTenant(tenantId)
-    return
-  }
-
   const { error } = await supabase.from('tenants').update({ house_id: null }).eq('id', tenantId)
   if (error) throw error
 }
 
 export async function vacateTenant(tenantId: string): Promise<void> {
-  if (isDemoSession()) {
-    demoVacateTenant(tenantId)
-    return
-  }
-
   const { error } = await supabase
     .from('tenants')
     .update({ status: 'vacated', vacating_date: todayIso(), house_id: null })
@@ -334,11 +289,6 @@ export interface CreatePaymentInput {
 }
 
 export async function createPayment(input: CreatePaymentInput): Promise<void> {
-  if (isDemoSession()) {
-    demoRecordPayment(input)
-    return
-  }
-
   const { data: tenantRow, error: tenantError } = await supabase
     .from('tenants')
     .select('rent, name, building_id')
@@ -366,7 +316,7 @@ export async function createPayment(input: CreatePaymentInput): Promise<void> {
     receipt_url: input.receiptUrl,
     // No DB sequence for this yet, so a timestamp-derived tag is the
     // simplest way to give every payment a unique, human-shareable receipt
-    // number — mirrors what demo mode shows without needing a real counter.
+    // number.
     receipt_number: `RCPT-${Date.now().toString(36).toUpperCase()}`,
   })
   if (paymentError) throw paymentError
@@ -379,14 +329,14 @@ export async function createPayment(input: CreatePaymentInput): Promise<void> {
   )
 }
 
-export type RecordDepositInput = DemoRecordDepositInput
+export interface RecordDepositInput {
+  tenantId: string
+  amount: number
+  paidDate: string
+  screenshotUrl: string | null
+}
 
 export async function recordDeposit(input: RecordDepositInput): Promise<void> {
-  if (isDemoSession()) {
-    demoRecordDeposit(input)
-    return
-  }
-
   const { data: tenantRow, error: tenantError } = await supabase
     .from('tenants')
     .select('name, building_id')
@@ -407,18 +357,13 @@ export async function recordDeposit(input: RecordDepositInput): Promise<void> {
 
   await pushSupabaseNotification(
     tenantRow.building_id,
-    'payment',
+    'deposit',
     'Deposit recorded',
     `${formatCurrency(input.amount)} deposit recorded for ${tenantRow.name}.`,
   )
 }
 
 export async function deleteDeposit(tenantId: string): Promise<void> {
-  if (isDemoSession()) {
-    demoDeleteDeposit(tenantId)
-    return
-  }
-
   const { error } = await supabase
     .from('tenants')
     .update({
@@ -431,14 +376,13 @@ export async function deleteDeposit(tenantId: string): Promise<void> {
   if (error) throw error
 }
 
-export type EditPaymentInput = DemoUpdatePaymentInput
+export interface EditPaymentInput {
+  id: string
+  amount: number
+  paymentDate: string
+}
 
 export async function updatePayment(input: EditPaymentInput): Promise<void> {
-  if (isDemoSession()) {
-    demoUpdatePayment(input)
-    return
-  }
-
   const { data: paymentRow, error: fetchError } = await supabase
     .from('payments')
     .select('tenant_id, for_month')
@@ -475,11 +419,6 @@ export async function updatePayment(input: EditPaymentInput): Promise<void> {
 }
 
 export async function deletePayment(paymentId: string, _tenantId: string): Promise<void> {
-  if (isDemoSession()) {
-    demoDeletePayment(paymentId)
-    return
-  }
-
   const { error } = await supabase.from('payments').delete().eq('id', paymentId)
   if (error) throw error
 }
@@ -497,20 +436,6 @@ export interface RentIncomeEntry {
 /** Every rent payment across all tenants — the "rent collection" side of the
  * income feed, so it shows up alongside other income and expenses. */
 export async function getRentIncomeEntries(): Promise<RentIncomeEntry[]> {
-  if (isDemoSession()) {
-    const db = getDemoDb()
-    const nameById = new Map(db.tenants.map((t) => [t.id, t.name]))
-    return db.payments.map((p) => ({
-      id: p.id,
-      tenantId: p.tenantId,
-      tenantName: nameById.get(p.tenantId) ?? 'Tenant',
-      amount: p.amount,
-      paymentDate: p.paymentDate,
-      forMonth: p.forMonth,
-      createdAt: p.createdAt,
-    }))
-  }
-
   const {
     data: { user },
   } = await supabase.auth.getUser()

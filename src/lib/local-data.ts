@@ -6,8 +6,7 @@ import { THEME_COLOR_KEY } from '@/constants/theme-colors'
 const PRESERVED_KEYS = ['theme', THEME_COLOR_KEY]
 
 /**
- * Wipes everything this app has stored on the device — the demo database,
- * App Lock PIN/biometrics, welcome-seen flag, and any cached auth session —
+ * Wipes everything this app has stored on the device — App Lock PIN/biometrics, welcome-seen flag, and any cached auth session —
  * but keeps the appearance preferences, then does a hard reload to the login
  * screen so no in-memory state (React Query cache, stores) survives either.
  * Cloud data is untouched; deleting that is `clearAccountData`'s job.

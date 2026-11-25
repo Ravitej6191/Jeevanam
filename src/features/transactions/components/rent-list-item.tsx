@@ -1,5 +1,6 @@
 import { ChevronRight, Home } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/utils/format'
+import { FlowArrow } from './flow-arrow'
 import type { RentIncomeEntry } from '@/features/tenants/services/tenants.service'
 
 /** Rent collected from a tenant. Read-only here — opens the tenant. */
@@ -17,6 +18,7 @@ export function RentListItem({ entry, onSelect }: { entry: RentIncomeEntry; onSe
         <p className="truncate text-sm font-medium text-foreground">Rent · {entry.tenantName}</p>
         <p className="truncate text-xs text-muted-foreground">{formatDate(entry.paymentDate)}</p>
       </div>
+      <FlowArrow direction="in" />
       <p className="font-numeric text-sm font-semibold text-success">+{formatCurrency(entry.amount)}</p>
       <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
     </button>

@@ -1,10 +1,9 @@
 import type { RentStatus, TenantStatus } from './database.types'
 
 /**
- * Canonical tenant record shared across the Building drill-down (house →
+ * Canonical tenant record shared across the Residency drill-down (house →
  * tenant preview) and the Tenants feature (list/detail) so both read the
- * exact same shape from the demo store instead of maintaining two views
- * that can drift apart.
+ * exact same shape instead of maintaining two views that can drift apart.
  */
 export interface Tenant {
   id: string

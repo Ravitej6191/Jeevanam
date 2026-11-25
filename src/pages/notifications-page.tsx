@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
-import { Bell, IndianRupee, ListX, Megaphone, UserPlus, Wallet } from 'lucide-react'
+import { Bell, HandCoins, Landmark, ListX, Megaphone, PiggyBank, ReceiptText, TrendingUp, UserPlus, Wallet } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -12,15 +12,19 @@ import { ConfirmSheet } from '@/components/common/confirm-sheet'
 import { PullToRefresh } from '@/components/common/pull-to-refresh'
 import { useNotifications } from '@/features/notifications/hooks/use-notifications'
 import { clearAllNotifications, markAllNotificationsRead } from '@/features/notifications/services/notifications.service'
-import type { NotificationType } from '@/lib/demo-store'
+import type { NotificationType } from '@/features/notifications/services/notifications.service'
 import { usePageTitle } from '@/hooks/use-page-title'
 import { usePageHeaderAction } from '@/hooks/use-page-header-action'
 
-const typeIcons: Record<NotificationType, LucideIcon> = {
-  tenant: UserPlus,
-  payment: IndianRupee,
-  expense: Wallet,
-  broadcast: Megaphone,
+const typeStyles: Record<NotificationType, { icon: LucideIcon; className: string }> = {
+  tenant: { icon: UserPlus, className: 'bg-primary/10 text-primary' },
+  payment: { icon: Wallet, className: 'bg-success/10 text-success' },
+  deposit: { icon: PiggyBank, className: 'bg-info/10 text-info' },
+  expense: { icon: ReceiptText, className: 'bg-warning/10 text-warning' },
+  income: { icon: TrendingUp, className: 'bg-success/10 text-success' },
+  loan: { icon: Landmark, className: 'bg-danger/10 text-danger' },
+  loan_repayment: { icon: HandCoins, className: 'bg-info/10 text-info' },
+  broadcast: { icon: Megaphone, className: 'bg-violet-500/10 text-violet-600 dark:text-violet-400' },
 }
 
 export function NotificationsPage() {
@@ -75,18 +79,18 @@ export function NotificationsPage() {
             ))}
           </div>
         ) : !notifications || notifications.length === 0 ? (
-          <EmptyState icon={Bell} title="No notifications" description="Activity like new tenants, payments, and broadcasts will show up here." />
+          <EmptyState icon={Bell} title="No notifications" description="Activity such as new tenants, payments, loans, expenses and broadcasts will show up here." />
         ) : (
           <>
             <div className="space-y-2">
               {notifications.map((notification) => {
-                const Icon = typeIcons[notification.type]
+                const { icon: Icon, className } = typeStyles[notification.type] ?? { icon: Bell, className: 'bg-muted text-muted-foreground' }
                 return (
                   <div
                     key={notification.id}
                     className="flex items-start gap-3 rounded-xl border border-border/70 bg-card/80 p-3.5"
                   >
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <span className={`flex size-9 shrink-0 items-center justify-center rounded-full ${className}`}>
                       <Icon className="size-4" />
                     </span>
                     <div className="min-w-0 flex-1">

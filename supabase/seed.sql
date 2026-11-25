@@ -1,5 +1,4 @@
--- Demo seed data — mirrors the shape of src/lib/demo-store.ts so a freshly
--- connected Supabase project looks the same as demo mode.
+-- Optional sample data for trying a freshly connected Supabase project.
 -- Run after 0001_init.sql, against a project that already has at least one
 -- auth.users row (sign up once via the app, then run this script).
 

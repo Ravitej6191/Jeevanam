@@ -4,16 +4,13 @@ import { motion } from 'motion/react'
 import { Building2, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
 import { GoogleIcon } from '@/components/common/google-icon'
-import { useAuth } from '@/providers/auth-provider'
 import { signInWithGoogle } from '../services/auth.service'
 
 const BRAND_STAGE_MS = 1100
 
 export function LoginForm() {
   const location = useLocation()
-  const { continueInDemoMode } = useAuth()
   const [stage, setStage] = useState<'brand' | 'form'>('brand')
   const [isSigningIn, setIsSigningIn] = useState(false)
 
@@ -85,28 +82,18 @@ export function LoginForm() {
             transition={{ duration: 0.4, ease: 'easeOut' }}
             className="mt-6 w-full space-y-5 rounded-xl border border-border bg-card p-6 shadow-xl shadow-black/5 dark:shadow-black/30"
           >
-            <p className="text-center text-sm text-muted-foreground">Sign in to manage your property</p>
+            <p className="text-center text-sm text-muted-foreground">Sign in to manage your residency</p>
 
             <Button variant="outline" className="w-full" disabled={isSigningIn} onClick={handleGoogleSignIn}>
               {isSigningIn ? <Loader2 className="size-4 animate-spin" /> : <GoogleIcon className="size-4" />}
               Continue with Google
-            </Button>
-
-            <div className="flex items-center gap-3">
-              <Separator className="flex-1" />
-              <span className="text-xs text-muted-foreground">or</span>
-              <Separator className="flex-1" />
-            </div>
-
-            <Button variant="secondary" className="w-full" onClick={continueInDemoMode}>
-              Try Demo
             </Button>
           </motion.div>
         ) : null}
       </motion.div>
 
       <p className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+1rem)] text-center text-xs text-muted-foreground/60">
-        Made with ❤️
+        Made with ❤️ by Ravi
       </p>
     </>
   )

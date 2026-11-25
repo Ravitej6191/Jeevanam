@@ -2,27 +2,26 @@ import { useEffect, useState } from 'react'
 import { PartyPopper } from 'lucide-react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
-import { useAuth } from '@/providers/auth-provider'
+import { useAuth } from '@/providers/auth-context'
 import { useBuildingData } from '@/features/building/hooks/use-building-data'
+import { isWelcomeSeen, markWelcomeSeen } from './welcome-seen'
 
-export const WELCOME_SEEN_KEY = 'jeevanam.welcomeSeen'
-const SEEN_KEY = WELCOME_SEEN_KEY
-
-export function WelcomeDrawer() {
+export function WelcomeDrawer({ onDismiss }: { onDismiss?: () => void }) {
   const { user } = useAuth()
   const { data: building } = useBuildingData()
   const [open, setOpen] = useState(false)
   const ownerFirstName = building?.building.ownerName?.split(' ')[0] || user?.name.split(' ')[0]
 
   useEffect(() => {
-    if (localStorage.getItem(SEEN_KEY) !== 'true') {
+    if (!isWelcomeSeen()) {
       setOpen(true)
     }
   }, [])
 
   const dismiss = () => {
-    localStorage.setItem(SEEN_KEY, 'true')
+    markWelcomeSeen()
     setOpen(false)
+    onDismiss?.()
   }
 
   return (

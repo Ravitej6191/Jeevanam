@@ -9,9 +9,7 @@ npm install
 npm run dev
 ```
 
-With no Supabase credentials the app runs in **demo mode**: everything is stored in the browser (`localStorage`).
-
-## Connect Supabase
+## Set up Supabase (required)
 
 1. Create a Supabase project and run `supabase/setup-all.sql` in the SQL editor (it is the migrations in `supabase/migrations`, in order).
 2. Copy `.env.example` to `.env` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
@@ -30,8 +28,7 @@ With no Supabase credentials the app runs in **demo mode**: everything is stored
 ## Layout
 
 - `src/pages` – one file per route
-- `src/features/<area>` – components, hooks, services and types per feature (each service has a demo branch and a Supabase branch)
+- `src/features/<area>` – components, hooks, services and types per feature (services talk to Supabase)
 - `src/components` – shared UI (`ui` = primitives, `common` = app components)
-- `src/lib/demo-store.ts` – the local demo database
 - `supabase` – migrations and seed
 - `server` – optional WhatsApp broadcast server

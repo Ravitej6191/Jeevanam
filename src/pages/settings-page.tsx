@@ -1,6 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useMutation } from '@tanstack/react-query'
 import { useTheme } from 'next-themes'
 import {
   Building2,
@@ -11,10 +10,7 @@ import {
   Moon,
   Palette,
   Pencil,
-  ShieldAlert,
   Sun,
-  Trash2,
-  Users,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import whatsappLogo from '@/assets/whatsapp-logo.svg'
@@ -27,13 +23,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ConfirmSheet } from '@/components/common/confirm-sheet'
 import { ErrorState } from '@/components/common/error-state'
 import { PullToRefresh } from '@/components/common/pull-to-refresh'
+import { DataCard } from '@/features/data-transfer/components/data-card'
 import { SetPinSheet } from '@/features/settings/components/set-pin-sheet'
 import { useBuildingData } from '@/features/building/hooks/use-building-data'
-import { clearAccountData } from '@/features/onboarding/services/onboarding.service'
-import { wipeLocalDataAndRestart } from '@/lib/local-data'
 import { applyThemeColor, getStoredThemeColor, themeColorPresets } from '@/constants/theme-colors'
 import { isBiometricAvailable, registerBiometricCredential } from '@/lib/biometric-auth'
-import { useAuth } from '@/providers/auth-provider'
+import { useAuth } from '@/providers/auth-context'
 import { useAppLockStore } from '@/store/app-lock-store'
 import { usePageTitle } from '@/hooks/use-page-title'
 
@@ -42,9 +37,7 @@ export function SettingsPage() {
   usePageTitle('Settings')
   const { resolvedTheme, setTheme } = useTheme()
   const { data, isError: isBuildingError, refetch } = useBuildingData()
-  const { user, isDemoMode, logout } = useAuth()
-  const [clearDataOpen, setClearDataOpen] = useState(false)
-  const [deleteAccountOpen, setDeleteAccountOpen] = useState(false)
+  const { user, logout } = useAuth()
   const appLockEnabled = useAppLockStore((s) => s.enabled)
   const biometricEnabled = useAppLockStore((s) => s.biometricEnabled)
   const disableAppLock = useAppLockStore((s) => s.disable)
@@ -58,27 +51,6 @@ export function SettingsPage() {
   useEffect(() => {
     void isBiometricAvailable().then(setBiometricSupported)
   }, [])
-
-  // Reset only touches this device: sign out (best effort — a demo or
-  // already-expired session just no-ops), then wipe all local storage and
-  // reload to the login screen. Cloud data stays and returns on next sign-in.
-  const resetDataMutation = useMutation({
-    mutationFn: async () => {
-      await logout().catch(() => undefined)
-    },
-    onSettled: () => wipeLocalDataAndRestart(),
-  })
-
-  // Delete removes the cloud account first; if that fails nothing local is
-  // touched. Demo mode has no cloud, so it just wipes local data.
-  const deleteAccountMutation = useMutation({
-    mutationFn: async () => {
-      await clearAccountData()
-      await logout().catch(() => undefined)
-    },
-    onSuccess: () => wipeLocalDataAndRestart(),
-    onError: () => toast.error('Could not delete your account. Please try again.'),
-  })
 
   const handleBiometricToggle = async (checked: boolean) => {
     if (!checked) {
@@ -257,46 +229,11 @@ export function SettingsPage() {
               <ChevronRight className="size-4 text-muted-foreground" />
             </button>
 
-            <button
-              type="button"
-              onClick={() => navigate('/settings/past-tenants')}
-              className="flex w-full items-center gap-2.5 py-3 text-left"
-            >
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                <Users className="size-4" />
-              </span>
-              <span className="flex-1 text-sm font-medium text-foreground">Past Tenants</span>
-              <ChevronRight className="size-4 text-muted-foreground" />
-            </button>
-
-            <>
-                <button
-                  type="button"
-                  onClick={() => setClearDataOpen(true)}
-                  className="flex w-full items-center gap-2.5 py-3 text-left"
-                >
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-warning/10 text-warning">
-                    <Trash2 className="size-4" />
-                  </span>
-                  <span className="flex-1 text-sm font-medium text-foreground">Reset App Data</span>
-                  <ChevronRight className="size-4 text-muted-foreground" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setDeleteAccountOpen(true)}
-                  className="flex w-full items-center gap-2.5 py-3 text-left"
-                >
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-danger/10 text-danger">
-                    <ShieldAlert className="size-4" />
-                  </span>
-                  <span className="flex-1 text-sm font-medium text-danger">Delete Account</span>
-                  <ChevronRight className="size-4 text-muted-foreground" />
-                </button>
-            </>
           </div>
         </CardContent>
       </Card>
+
+      <DataCard />
 
       <Button
         variant="outline"
@@ -311,36 +248,8 @@ export function SettingsPage() {
       </Button>
 
       <div className="flex items-center justify-center gap-1.5 pb-4 text-center text-xs text-muted-foreground">
-        <span>Made by Ravi</span>
+        <span>Made with ❤️ by Ravi</span>
       </div>
-
-      <ConfirmSheet
-        open={clearDataOpen}
-        onOpenChange={setClearDataOpen}
-        title="Reset app data?"
-        description={
-          isDemoMode
-            ? 'This deletes everything stored on this device — all demo data and settings — and returns you to the login screen. This cannot be undone.'
-            : 'This deletes everything stored on this device — settings, App Lock, and your session — and signs you out. Your cloud data is kept and comes back when you sign in again.'
-        }
-        confirmLabel="Reset"
-        isPending={resetDataMutation.isPending}
-        onConfirm={() => resetDataMutation.mutate()}
-      />
-
-      <ConfirmSheet
-        open={deleteAccountOpen}
-        onOpenChange={setDeleteAccountOpen}
-        title="Delete your account?"
-        description={
-          isDemoMode
-            ? 'This deletes everything stored on this device and returns you to the login screen. This cannot be undone.'
-            : 'This permanently deletes your account and all your data — residency, tenants, payments, expenses, uploaded photos — from the cloud and this device. This cannot be undone.'
-        }
-        confirmLabel="Delete Account"
-        isPending={deleteAccountMutation.isPending}
-        onConfirm={() => deleteAccountMutation.mutate()}
-      />
 
       <SetPinSheet open={setPinOpen} onOpenChange={setSetPinOpen} />
 

@@ -110,7 +110,7 @@ export function AddLoanSheet({ open, onOpenChange, existingLoan }: AddLoanSheetP
 
         <form onSubmit={handleSubmit((values) => mutation.mutate(values))} className="space-y-4 px-4 pb-8">
           <div className="space-y-1.5">
-            <Label>Loan Type</Label>
+            <Label>Loan type</Label>
             <Controller
               name="lenderType"
               control={control}

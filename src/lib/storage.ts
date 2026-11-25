@@ -1,29 +1,13 @@
-import { isDemoSession } from '@/config/env'
 import { supabase } from './supabase'
 
 const BUCKET = 'tenant-uploads'
 
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = () => reject(reader.error instanceof Error ? reader.error : new Error('Could not read file'))
-    reader.readAsDataURL(file)
-  })
-}
-
 /**
  * Uploads a tenant-related file (photo, deposit screenshot) and returns a
- * URL to store on the record. In demo mode (no live Supabase project) this
- * falls back to a base64 data URL so the feature stays fully demoable
- * without a bucket. Against a real backend it uploads to Supabase Storage
- * instead of writing large base64 blobs into `select('*')` rows.
+ * URL to store on the record, uploading it to Supabase Storage instead of
+ * writing large base64 blobs into `select('*')` rows.
  */
 export async function uploadTenantFile(file: File, folder: string): Promise<string> {
-  if (isDemoSession()) {
-    return fileToDataUrl(file)
-  }
-
   const {
     data: { user },
   } = await supabase.auth.getUser()
