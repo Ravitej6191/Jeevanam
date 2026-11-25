@@ -1,11 +1,9 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Capacitor } from '@capacitor/core'
 import { useTheme } from 'next-themes'
 import {
   Building2,
   Check,
-  ChevronRight,
   Lock,
   LogOut,
   Moon,
@@ -14,7 +12,6 @@ import {
   Sun,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import whatsappLogo from '@/assets/whatsapp-logo.svg'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -217,20 +214,6 @@ export function SettingsPage() {
                 />
               </div>
             ) : null}
-
-            {Capacitor.isNativePlatform() ? null : (
-              <button
-                type="button"
-                onClick={() => navigate('/settings/whatsapp')}
-                className="flex w-full items-center gap-2.5 py-3 text-left"
-              >
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted p-1.5">
-                  <img src={whatsappLogo} alt="" className="size-full" />
-                </span>
-                <span className="flex-1 text-sm font-medium text-foreground">Connect WhatsApp</span>
-                <ChevronRight className="size-4 text-muted-foreground" />
-              </button>
-            )}
 
           </div>
         </CardContent>

@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Capacitor } from '@capacitor/core'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Controller, useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Camera, ImagePlus, Loader2, X } from 'lucide-react'
+import { MessageSquareText, Smartphone } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -19,59 +18,38 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { ConfirmSheet } from '@/components/common/confirm-sheet'
+import { EmptyState } from '@/components/common/empty-state'
 import { useBuildingData } from '@/features/building/hooks/use-building-data'
-import { logBroadcast, sendBroadcast } from '@/features/broadcast/services/broadcast.service'
-import { WhatsAppSendList, type SendRecipient } from '@/features/broadcast/components/whatsapp-send-list'
-import { uploadTenantFile } from '@/lib/storage'
+import { logBroadcast } from '@/features/broadcast/services/broadcast.service'
+import { SmsSendSheet, type SmsRecipient } from '@/features/broadcast/components/sms-send-sheet'
+import { smsInfo } from '@/features/broadcast/sms-length'
+import { canSendSms } from '@/lib/sms'
 import type { Tenant } from '@/types/domain'
 import { usePageTitle } from '@/hooks/use-page-title'
 
 const broadcastSchema = z.object({
-  message: z.string().min(2, 'Enter a message'),
+  message: z.string().trim().min(2, 'Enter a message').max(600, 'Keep the message under 600 characters'),
   audience: z.string().min(1),
 })
 
 type BroadcastFormValues = z.infer<typeof broadcastSchema>
 
+interface PendingSend {
+  recipients: SmsRecipient[]
+  message: string
+  audience: string
+}
+
 export function BroadcastPage() {
   const navigate = useNavigate()
   const onBack = useCallback(() => navigate(-1), [navigate])
-  usePageTitle('Broadcast a Message', onBack)
+  usePageTitle('Send SMS to Tenants', onBack)
 
   const { data: building } = useBuildingData()
   const queryClient = useQueryClient()
-  const [imagePreview, setImagePreview] = useState<string | null>(null)
-  const [imageFile, setImageFile] = useState<File | null>(null)
-  const [isUploadingImage, setIsUploadingImage] = useState(false)
-  const [phoneSend, setPhoneSend] = useState<{ recipients: SendRecipient[]; text: string; imageUrl: string | null; label: string; rawMessage: string } | null>(null)
-  const isNative = Capacitor.isNativePlatform()
-  const cameraInputRef = useRef<HTMLInputElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const objectUrlRef = useRef<string | null>(null)
-
-  useEffect(() => {
-    return () => {
-      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current)
-    }
-  }, [])
-
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file) return
-    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current)
-    const objectUrl = URL.createObjectURL(file)
-    objectUrlRef.current = objectUrl
-    setImageFile(file)
-    setImagePreview(objectUrl)
-  }
-
-  const handleRemoveImage = () => {
-    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current)
-    objectUrlRef.current = null
-    setImageFile(null)
-    setImagePreview(null)
-  }
+  const [confirm, setConfirm] = useState<PendingSend | null>(null)
+  const [sending, setSending] = useState<PendingSend | null>(null)
 
   const allTenants = useMemo(() => {
     const list: (Tenant & { floorId: string })[] = []
@@ -101,6 +79,7 @@ export function BroadcastPage() {
     control,
     register,
     handleSubmit,
+    watch,
     reset,
     formState: { errors },
   } = useForm<BroadcastFormValues>({
@@ -128,180 +107,149 @@ export function BroadcastPage() {
     return { tenants: [], label: 'Unknown' }
   }
 
-  const finishPhoneSend = useMutation({
-    mutationFn: async (openedCount: number) => {
-      if (!phoneSend) return
-      await logBroadcast({
-        message: phoneSend.rawMessage,
-        imageUrl: phoneSend.imageUrl,
-        audience: phoneSend.label,
-        recipientCount: phoneSend.recipients.length,
-        deliveredCount: openedCount,
-      })
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['notifications'] })
-      toast.success('Broadcast saved')
-      navigate(-1)
-    },
-    onError: () => toast.error('Could not save the broadcast. Please try again.'),
-  })
-
-  const mutation = useMutation({
-    mutationFn: sendBroadcast,
-    onSuccess: async (result) => {
-      await queryClient.invalidateQueries({ queryKey: ['notifications'] })
-      if (result.recipientCount === 0) {
-        toast.warning('No tenants matched this audience — nothing was sent.')
-      } else if (result.deliveredCount === result.recipientCount) {
-        toast.success(`Sent to ${result.deliveredCount} tenant${result.deliveredCount === 1 ? '' : 's'}`)
-      } else {
-        toast.warning(`Delivered to ${result.deliveredCount}/${result.recipientCount} — some numbers failed`)
-      }
-      reset()
-      handleRemoveImage()
-      navigate(-1)
-    },
-    onError: () => toast.error('Could not send the broadcast. Please try again.'),
-  })
-
-  const onSubmit = async (values: BroadcastFormValues) => {
-    let imageUrl = imageFile ? null : imagePreview
-    if (imageFile) {
-      setIsUploadingImage(true)
-      try {
-        imageUrl = await uploadTenantFile(imageFile, 'broadcast-images')
-      } catch {
-        toast.error('Could not upload the image. Please try again.')
-        setIsUploadingImage(false)
-        return
-      }
-      setIsUploadingImage(false)
-    }
-    const { tenants, label } = resolveAudience(values.audience)
-    if (tenants.length === 0) {
-      toast.warning('No tenants matched this audience — nothing was sent.')
-      return
-    }
-    if (isNative) {
-      const seen = new Set<string>()
-      const recipients = tenants
-        .filter((t) => !seen.has(t.phone) && seen.add(t.phone))
-        .map((t) => ({ id: t.id, name: t.name, phone: t.phone }))
-      // WhatsApp links carry text only, so a photo goes along as a link.
-      const text = imageUrl ? `${values.message}\n${imageUrl}` : values.message
-      setPhoneSend({ recipients, text, imageUrl, label, rawMessage: values.message })
-      return
-    }
-    mutation.mutate({ message: values.message, imageUrl, audience: label, recipients: tenants.map((t) => t.phone) })
+  // One SMS per phone number, even if two tenants share a number.
+  const toRecipients = (tenants: Tenant[]): SmsRecipient[] => {
+    const seen = new Set<string>()
+    return tenants
+      .filter((t) => !seen.has(t.phone) && seen.add(t.phone))
+      .map((t) => ({ id: t.id, name: t.name, phone: t.phone }))
   }
 
-  if (phoneSend) {
+  const audienceValue = watch('audience')
+  const messageValue = watch('message')
+  const recipientCount = toRecipients(resolveAudience(audienceValue).tenants).length
+  const info = smsInfo(messageValue.trim())
+
+  const logMutation = useMutation({
+    mutationFn: logBroadcast,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+  })
+
+  const onSubmit = (values: BroadcastFormValues) => {
+    const { tenants, label } = resolveAudience(values.audience)
+    const recipients = toRecipients(tenants)
+    if (recipients.length === 0) {
+      toast.warning('No tenants match this audience.')
+      return
+    }
+    setConfirm({ recipients, message: values.message.trim(), audience: label })
+  }
+
+  const finishSending = (sentCount: number) => {
+    const done = sending
+    setSending(null)
+    if (!done || sentCount === 0) return
+    logMutation.mutate({
+      message: done.message,
+      imageUrl: null,
+      audience: done.audience,
+      recipientCount: done.recipients.length,
+      deliveredCount: sentCount,
+    })
+    toast.success(`SMS sent to ${sentCount} tenant${sentCount === 1 ? '' : 's'}`)
+    reset()
+    navigate(-1)
+  }
+
+  if (!canSendSms()) {
     return (
-      <WhatsAppSendList
-        recipients={phoneSend.recipients}
-        message={phoneSend.text}
-        isFinishing={finishPhoneSend.isPending}
-        onFinish={(openedCount) => finishPhoneSend.mutate(openedCount)}
-        onBack={() => setPhoneSend(null)}
+      <EmptyState
+        icon={Smartphone}
+        title="Send SMS from the Android app"
+        description="Text messages go out from your phone's SIM, so this works in the Jeevanam Android app, not in a browser."
       />
     )
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pb-8">
-      <div className="space-y-1.5">
-        <Label>Audience</Label>
-        <Controller
-          name="audience"
-          control={control}
-          render={({ field }) => (
-            <Select value={field.value} onValueChange={field.onChange}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {audienceGroups.general.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-                {audienceGroups.floors.length > 0 ? (
+    <>
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pb-8">
+        <div className="space-y-1.5">
+          <Label>Send to</Label>
+          <Controller
+            name="audience"
+            control={control}
+            render={({ field }) => (
+              <Select value={field.value} onValueChange={field.onChange}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
                   <SelectGroup>
-                    <SelectLabel>By Floor</SelectLabel>
-                    {audienceGroups.floors.map((option) => (
+                    {audienceGroups.general.map((option) => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}
                       </SelectItem>
                     ))}
                   </SelectGroup>
-                ) : null}
-                {audienceGroups.tenants.length > 0 ? (
-                  <SelectGroup>
-                    <SelectLabel>Tenants</SelectLabel>
-                    {audienceGroups.tenants.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                ) : null}
-              </SelectContent>
-            </Select>
-          )}
-        />
-      </div>
+                  {audienceGroups.floors.length > 0 ? (
+                    <SelectGroup>
+                      <SelectLabel>By Floor</SelectLabel>
+                      {audienceGroups.floors.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  ) : null}
+                  {audienceGroups.tenants.length > 0 ? (
+                    <SelectGroup>
+                      <SelectLabel>Tenants</SelectLabel>
+                      {audienceGroups.tenants.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  ) : null}
+                </SelectContent>
+              </Select>
+            )}
+          />
+          <p className="text-xs text-muted-foreground">
+            {recipientCount === 0
+              ? 'No tenants match this choice.'
+              : `${recipientCount} tenant${recipientCount === 1 ? '' : 's'} will get this message.`}
+          </p>
+        </div>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="message">Message</Label>
-        <Textarea id="message" rows={5} placeholder="Write your message..." {...register('message')} />
-        {errors.message ? <p className="text-xs text-danger">{errors.message.message}</p> : null}
-      </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="message">Message</Label>
+          <Textarea id="message" rows={5} placeholder="Write your message..." {...register('message')} />
+          {errors.message ? <p className="text-xs text-danger">{errors.message.message}</p> : null}
+          <p className="text-xs text-muted-foreground">
+            {info.length} characters · {info.parts} SMS
+            {info.unicode ? ' · special letters (like ₹ or Telugu) fit only 70 characters per SMS' : ''}
+          </p>
+        </div>
 
-      <div className="space-y-1.5">
-        <Label>Image (optional)</Label>
-        <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImageChange} />
-        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
-        {imagePreview ? (
-          <div className="relative w-fit">
-            <img src={imagePreview} alt="Broadcast attachment" className="h-32 rounded-lg border border-border/70 object-cover" />
-            <button
-              type="button"
-              onClick={handleRemoveImage}
-              aria-label="Remove image"
-              className="absolute -top-2 -right-2 flex size-6 items-center justify-center rounded-full bg-danger text-danger-foreground shadow-sm"
-            >
-              <X className="size-3.5" />
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => cameraInputRef.current?.click()}
-              className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-border/70 py-4 text-sm text-muted-foreground transition-colors hover:bg-accent/50"
-            >
-              <Camera className="size-4" />
-              Take Photo
-            </button>
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-border/70 py-4 text-sm text-muted-foreground transition-colors hover:bg-accent/50"
-            >
-              <ImagePlus className="size-4" />
-              Upload Image
-            </button>
-          </div>
-        )}
-      </div>
+        <Button type="submit" className="w-full" disabled={recipientCount === 0}>
+          <MessageSquareText className="size-4" />
+          Send SMS
+        </Button>
+      </form>
 
-      <Button type="submit" className="w-full" disabled={mutation.isPending || isUploadingImage}>
-        {mutation.isPending || isUploadingImage ? <Loader2 className="size-4 animate-spin" /> : null}
-        {isNative ? 'Continue' : 'Send Broadcast'}
-      </Button>
-    </form>
+      <ConfirmSheet
+        open={confirm !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirm(null)
+        }}
+        title={confirm ? `Send SMS to ${confirm.recipients.length} tenant${confirm.recipients.length === 1 ? '' : 's'}?` : ''}
+        description="The messages are sent from this phone's SIM. Your plan's normal SMS rates apply."
+        confirmLabel="Send"
+        destructive={false}
+        onConfirm={() => {
+          setSending(confirm)
+          setConfirm(null)
+        }}
+      />
+
+      <SmsSendSheet
+        open={sending !== null}
+        recipients={sending?.recipients ?? []}
+        message={sending?.message ?? ''}
+        onClose={finishSending}
+      />
+    </>
   )
 }

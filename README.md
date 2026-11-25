@@ -30,7 +30,6 @@ npm run dev
 Needs Android Studio (for the SDK and Java). From the project folder:
 
 ```powershell
-$env:VITE_WHATSAPP_SERVER_TOKEN = ''   # keep the PC server token out of the app
 npm run build
 npx cap sync android
 cd android
@@ -43,8 +42,10 @@ The signed APK is `android/app/build/outputs/apk/release/app-release.apk`. Signi
 them up, because updates must be signed with the same key). Raise `versionCode` in
 `android/app/build.gradle` for every new release.
 
-On the phone, Broadcast opens WhatsApp with each tenant's message ready; the PC WhatsApp
-server (`server/`) is only used from the browser version.
+Broadcast sends real SMS from the phone's SIM through the small native plugin in
+`plugins/jeevanam-sms` (Android only; the browser version shows a notice instead).
+The app asks for the SMS permission the first time. On Android 13+ a sideloaded APK may
+also need App info → ⋮ → **Allow restricted settings** before the permission can be granted.
 
 ## Layout
 
@@ -52,4 +53,4 @@ server (`server/`) is only used from the browser version.
 - `src/features/<area>` – components, hooks, services and types per feature (services talk to Supabase)
 - `src/components` – shared UI (`ui` = primitives, `common` = app components)
 - `supabase` – migrations and seed
-- `server` – optional WhatsApp broadcast server
+- `plugins/jeevanam-sms` – Android plugin that sends SMS directly

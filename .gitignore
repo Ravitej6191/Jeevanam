@@ -16,9 +16,6 @@ dist-ssr
 .env
 .env.*.local
 
-# Baileys WhatsApp session/auth state — contains live session credentials,
-# never commit regardless of the folder name Baileys happens to use.
-server/auth_info*/
 
 # Capacitor native platforms (added later via `npx cap add`)
 /android
@@ -42,3 +39,7 @@ keystore.properties
 
 # Built APKs
 /release/
+
+# Native plugin build output
+plugins/**/android/build/
+plugins/**/android/.gradle/

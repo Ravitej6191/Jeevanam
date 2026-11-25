@@ -35,9 +35,6 @@ const EditProfilePage = lazyRetry(() =>
 const NotificationsPage = lazyRetry(() =>
   import('@/pages/notifications-page').then((m) => ({ default: m.NotificationsPage })),
 )
-const WhatsAppIntegrationPage = lazyRetry(() =>
-  import('@/pages/whatsapp-integration-page').then((m) => ({ default: m.WhatsAppIntegrationPage })),
-)
 const NotFoundPage = lazyRetry(() => import('@/pages/not-found-page').then((m) => ({ default: m.NotFoundPage })))
 
 export const router = createBrowserRouter([
@@ -76,7 +73,6 @@ export const router = createBrowserRouter([
               { path: '/settings', element: <PageSuspense><SettingsPage /></PageSuspense> },
               { path: '/settings/past-tenants', element: <PageSuspense><PastTenantsPage /></PageSuspense> },
               { path: '/settings/edit-profile', element: <PageSuspense><EditProfilePage /></PageSuspense> },
-              { path: '/settings/whatsapp', element: <PageSuspense><WhatsAppIntegrationPage /></PageSuspense> },
               { path: '/notifications', element: <PageSuspense><NotificationsPage /></PageSuspense> },
             ],
           },

@@ -13,7 +13,6 @@
   "dependencies": {
     "@capacitor/android": "^8.4.2",
     "@capacitor/app": "^8.1.0",
-    "@capacitor/app-launcher": "^8.0.1",
     "@capacitor/browser": "^8.0.4",
     "@capacitor/cli": "^8.4.2",
     "@capacitor/core": "^8.4.2",
@@ -30,6 +29,7 @@
     "date-fns": "^4.4.0",
     "echarts": "^6.1.0",
     "echarts-for-react": "^3.0.6",
+    "jeevanam-sms": "file:plugins/jeevanam-sms",
     "lucide-react": "^1.24.0",
     "motion": "^12.42.2",
     "next-themes": "^0.4.6",
