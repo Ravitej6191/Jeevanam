@@ -1,7 +1,7 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { ChevronRight, Download, Loader2, ShieldAlert, Trash2, Upload, Users } from 'lucide-react'
+import { ChevronRight, Download, Loader2, ShieldAlert, Trash2, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
 import { ConfirmSheet } from '@/components/common/confirm-sheet'
@@ -9,19 +9,7 @@ import { clearAccountData, clearAppData } from '@/features/onboarding/services/o
 import { useAuth } from '@/providers/auth-context'
 import { wipeLocalDataAndRestart } from '@/lib/local-data'
 import { todayIso } from '@/utils/format'
-import {
-  BackupError,
-  backupToXlsx,
-  exportBackup,
-  importBackup,
-  readBackupFile,
-  summarizeBackup,
-  type Backup,
-} from '../services/data-transfer.service'
-
-function plural(count: number, noun: string) {
-  return `${count} ${noun}${count === 1 ? '' : 's'}`
-}
+import { backupToXlsx, exportBackup } from '../services/data-transfer.service'
 
 function downloadBlob(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob)
@@ -67,8 +55,6 @@ export function DataCard() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { logout } = useAuth()
-  const fileInput = useRef<HTMLInputElement>(null)
-  const [pendingImport, setPendingImport] = useState<Backup | null>(null)
   const [clearDataOpen, setClearDataOpen] = useState(false)
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false)
 
@@ -79,19 +65,6 @@ export function DataCard() {
       toast.success('Excel file downloaded')
     },
     onError: () => toast.error('Could not export your data. Please try again.'),
-  })
-
-  const importMutation = useMutation({
-    mutationFn: importBackup,
-    onSuccess: async () => {
-      setPendingImport(null)
-      await queryClient.invalidateQueries()
-      toast.success('Data imported')
-    },
-    onError: (error) => {
-      setPendingImport(null)
-      toast.error(error instanceof BackupError ? error.message : 'Could not import that file. Please try again.')
-    },
   })
 
   // Reset deletes all the owner's data but keeps the account and sign-in, so
@@ -118,17 +91,6 @@ export function DataCard() {
     onError: () => toast.error('Could not delete your account. Please try again.'),
   })
 
-  const handleFile = async (file: File | undefined) => {
-    if (!file) return
-    try {
-      setPendingImport(await readBackupFile(file))
-    } catch (error) {
-      toast.error(error instanceof BackupError ? error.message : 'Could not read that file.')
-    }
-  }
-
-  const summary = pendingImport ? summarizeBackup(pendingImport) : null
-
   return (
     <>
       <Card className="border-border">
@@ -142,13 +104,6 @@ export function DataCard() {
               label="Export Data"
               busy={exportMutation.isPending}
               onClick={() => exportMutation.mutate()}
-            />
-            <ActionRow
-              icon={<Upload className="size-4" />}
-              iconClassName="bg-muted text-muted-foreground"
-              label="Import Data"
-              busy={importMutation.isPending}
-              onClick={() => fileInput.current?.click()}
             />
             <ActionRow
               icon={<Users className="size-4" />}
@@ -172,34 +127,6 @@ export function DataCard() {
           </div>
         </CardContent>
       </Card>
-
-      <input
-        ref={fileInput}
-        type="file"
-        accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        className="hidden"
-        onChange={(event) => {
-          void handleFile(event.target.files?.[0])
-          event.target.value = ''
-        }}
-      />
-
-      <ConfirmSheet
-        open={pendingImport !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingImport(null)
-        }}
-        title="Import this file?"
-        description={
-          summary
-            ? `This adds ${plural(summary.tenants, 'tenant')}, ${plural(summary.payments, 'payment')}, ${plural(summary.loans, 'loan')}, ${plural(summary.expenses, 'expense')} and ${summary.incomes} income ${summary.incomes === 1 ? 'entry' : 'entries'} to your account. Import only works on an empty account.`
-            : ''
-        }
-        confirmLabel="Import"
-        destructive={false}
-        isPending={importMutation.isPending}
-        onConfirm={() => pendingImport && importMutation.mutate(pendingImport)}
-      />
 
       <ConfirmSheet
         open={clearDataOpen}
